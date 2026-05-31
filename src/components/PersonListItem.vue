@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 
+import { useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
 import type { Person } from "@/types/models";
 
-defineProps<{
+const props = defineProps<{
   person: Person;
   tagNames?: string[];
 }>();
+
+const workspaceTabs = useWorkspaceTabsStore();
+
+function openPersonTab(): void {
+  workspaceTabs.openPersonTab(props.person.id, props.person.name);
+}
 </script>
 
 <template>
-  <RouterLink class="list-row" :to="`/people/${person.id}`">
+  <RouterLink class="list-row" :to="`/people/${person.id}`" @click="openPersonTab">
     <span>
       <span class="list-title">{{ person.name }}</span>
       <span v-if="person.archived" class="status-pill">已归档</span>

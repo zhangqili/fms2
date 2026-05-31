@@ -97,14 +97,120 @@ textarea {
 }
 
 .main-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
   min-width: 0;
   padding: 32px;
+}
+
+.workspace-tabs {
+  display: flex;
+  max-width: 1120px;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #d8e3e0;
+}
+
+.workspace-tab {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 240px;
+  overflow: hidden;
+  border: 1px solid #cad8d6;
+  border-radius: 8px;
+  color: #3c4b50;
+  background: #ffffff;
+}
+
+.workspace-tab.active {
+  border-color: #245c73;
+  color: #183138;
+  background: #e8f2ef;
+}
+
+.workspace-tab-main,
+.workspace-tab-close {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.workspace-tab-main {
+  min-width: 0;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.workspace-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tab-close {
+  width: 32px;
+  justify-content: center;
+  border-left: 1px solid rgba(36, 92, 115, 0.16);
+}
+
+.workspace-tab-close:hover {
+  color: #7c2222;
+  background: rgba(185, 84, 84, 0.1);
 }
 
 .page {
   display: grid;
   max-width: 1120px;
-  gap: 20px;
+  gap: 14px;
+}
+
+.detail-page {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: calc(100vh - 64px);
+  min-height: 0;
+}
+
+.workspace-tabs + .detail-page {
+  height: calc(100vh - 127px);
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  align-items: stretch;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.detail-main,
+.detail-side {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+  gap: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.detail-side .table-row {
+  font-size: 0.875rem;
+}
+
+.detail-side .out-table .table-row {
+  grid-template-columns: minmax(0, 1fr) 64px 70px 44px;
 }
 
 .page-header {
@@ -187,7 +293,7 @@ textarea {
 }
 
 .panel {
-  padding: 16px;
+  padding: 12px;
 }
 
 .section-title {
@@ -195,7 +301,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .section-title h2 {
@@ -244,13 +350,14 @@ textarea {
 .editable-row {
   display: grid;
   align-items: center;
-  gap: 12px;
-  min-height: 48px;
+  gap: 8px;
   border-top: 1px solid #edf2f0;
 }
 
 .list-row {
   grid-template-columns: 1fr auto;
+  min-height: 38px;
+  padding-block: 5px;
 }
 
 .list-row:first-child,
@@ -259,7 +366,12 @@ textarea {
 }
 
 .list-title {
+  font-size: 0.95rem;
   font-weight: 650;
+}
+
+.list-meta {
+  font-size: 0.875rem;
 }
 
 .inline-tags {
@@ -273,8 +385,8 @@ textarea {
 .status-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 7px;
+  min-height: 20px;
+  padding: 0 6px;
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 650;
@@ -323,6 +435,8 @@ textarea {
 
 .score-row {
   grid-template-columns: 1fr auto;
+  min-height: 40px;
+  padding-block: 5px;
 }
 
 .table-panel {
@@ -331,6 +445,16 @@ textarea {
 
 .table-row {
   grid-template-columns: 80px minmax(0, 1fr) 120px 120px;
+  min-height: 36px;
+  padding-block: 4px;
+}
+
+.history-table .table-row {
+  grid-template-columns: 128px minmax(0, 1fr) 100px 88px 88px;
+}
+
+.out-table .table-row {
+  grid-template-columns: minmax(0, 1fr) 120px 120px 96px;
 }
 
 .table-head {
@@ -339,8 +463,23 @@ textarea {
   font-weight: 700;
 }
 
+.table-link {
+  min-width: 0;
+  overflow: hidden;
+  color: #245c73;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-link:hover {
+  text-decoration: underline;
+}
+
 .editable-row {
   grid-template-columns: minmax(0, 1fr) 64px 72px auto auto;
+  min-height: 42px;
+  padding-block: 5px;
 }
 
 .form-grid {
@@ -471,6 +610,14 @@ textarea {
     padding: 20px 14px;
   }
 
+  .workspace-tabs {
+    margin: 0 -2px;
+  }
+
+  .workspace-tab {
+    max-width: 200px;
+  }
+
   .page-header,
   .toolbar,
   .inline-form {
@@ -482,8 +629,35 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .detail-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .detail-page,
+  .workspace-tabs + .detail-page {
+    height: auto;
+  }
+
+  .detail-main,
+  .detail-side {
+    overflow-y: visible;
+    padding-right: 0;
+  }
+
   .table-row {
     grid-template-columns: 54px minmax(0, 1fr) 72px 76px;
+  }
+
+  .history-table .table-row,
+  .out-table .table-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .history-table .table-row span:nth-child(1),
+  .history-table .table-row .table-link,
+  .out-table .table-row .table-link {
+    grid-column: 1 / -1;
   }
 
   .editable-row {

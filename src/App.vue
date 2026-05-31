@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { Award, Home, Settings, Tags, Users } from "lucide-vue-next";
-import { RouterLink, RouterView } from "vue-router";
+import { watch } from "vue";
+import { RouterLink, RouterView, useRoute } from "vue-router";
+
+import WorkspaceTabs from "@/components/WorkspaceTabs.vue";
+import {
+  getLeaderboard,
+  leaderboardDisplayTitle
+} from "@/repositories/leaderboardsRepository";
+import { getPerson } from "@/repositories/peopleRepository";
+import { useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
 
 const navItems = [
   { to: "/", label: "首页", icon: Home },
@@ -9,6 +18,51 @@ const navItems = [
   { to: "/leaderboards", label: "榜单", icon: Award },
   { to: "/settings", label: "设置", icon: Settings }
 ];
+
+const route = useRoute();
+const workspaceTabs = useWorkspaceTabsStore();
+let syncVersion = 0;
+
+watch(
+  () => route.fullPath,
+  () => {
+    void syncWorkspaceTabFromRoute();
+  },
+  { immediate: true }
+);
+
+async function syncWorkspaceTabFromRoute(): Promise<void> {
+  const currentVersion = ++syncVersion;
+  const entityId = routeParamId();
+
+  if (route.name === "person-detail" && entityId) {
+    workspaceTabs.openPersonTab(entityId, undefined, route.fullPath);
+    const person = await getPerson(entityId);
+    if (currentVersion === syncVersion && person) {
+      workspaceTabs.updateTabTitle("person", entityId, person.name);
+    }
+    return;
+  }
+
+  if (route.name === "leaderboard-detail" && entityId) {
+    workspaceTabs.openLeaderboardTab(entityId, undefined, route.fullPath);
+    const leaderboard = await getLeaderboard(entityId);
+    if (currentVersion === syncVersion && leaderboard) {
+      workspaceTabs.updateTabTitle("leaderboard", entityId, leaderboardDisplayTitle(leaderboard));
+    }
+    return;
+  }
+
+  workspaceTabs.clearActiveTab();
+}
+
+function routeParamId(): string | null {
+  const id = route.params.id;
+  if (Array.isArray(id)) {
+    return id[0] ?? null;
+  }
+  return typeof id === "string" ? id : null;
+}
 </script>
 
 <template>
@@ -31,6 +85,7 @@ const navItems = [
     </aside>
 
     <main class="main-panel">
+      <WorkspaceTabs />
       <RouterView />
     </main>
   </div>
