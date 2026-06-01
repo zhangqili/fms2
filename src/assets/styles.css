@@ -656,6 +656,63 @@ textarea {
   background: #e4f5ea;
 }
 
+.pwa-status {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 36px));
+  min-height: 46px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid #cad8d6;
+  border-radius: 8px;
+  color: #183138;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(24, 35, 39, 0.14);
+}
+
+.pwa-status[data-kind="offline"] {
+  border-color: #f0c36f;
+  background: #fff8e8;
+}
+
+.pwa-status[data-kind="refresh"] {
+  border-color: #245c73;
+  background: #e8f2ef;
+}
+
+.pwa-status[data-kind="ready"] {
+  border-color: #b7dcc4;
+  background: #ecf8f0;
+}
+
+.pwa-status > span {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.pwa-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(36, 92, 115, 0.16);
+  border-radius: 8px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.pwa-action:hover {
+  border-color: #245c73;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -767,5 +824,11 @@ textarea {
   .editable-row .list-meta,
   .editable-row .button {
     grid-column: 1 / -1;
+  }
+
+  .pwa-status {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100vw - 24px);
   }
 }

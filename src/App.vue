@@ -3,6 +3,7 @@ import { Award, Download, Home, Settings, Tags, Users } from "lucide-vue-next";
 import { watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
+import PwaStatus from "@/components/PwaStatus.vue";
 import WorkspaceTabs from "@/components/WorkspaceTabs.vue";
 import {
   getLeaderboard,
@@ -89,5 +90,7 @@ function routeParamId(): string | null {
       <WorkspaceTabs />
       <RouterView />
     </main>
+
+    <PwaStatus />
   </div>
 </template>
