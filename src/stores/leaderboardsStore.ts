@@ -1,7 +1,11 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
-import { listLeaderboards } from "@/repositories/leaderboardsRepository";
+import {
+  createLeaderboard,
+  listLeaderboards,
+  type CreateLeaderboardInput
+} from "@/repositories/leaderboardsRepository";
 import type { Leaderboard } from "@/types/models";
 
 export const useLeaderboardsStore = defineStore("leaderboards", () => {
@@ -11,8 +15,15 @@ export const useLeaderboardsStore = defineStore("leaderboards", () => {
     leaderboards.value = await listLeaderboards();
   }
 
+  async function addLeaderboard(input: CreateLeaderboardInput): Promise<Leaderboard> {
+    const leaderboard = await createLeaderboard(input);
+    await loadLeaderboards();
+    return leaderboard;
+  }
+
   return {
     leaderboards,
-    loadLeaderboards
+    loadLeaderboards,
+    addLeaderboard
   };
 });

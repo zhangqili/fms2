@@ -31,6 +31,7 @@ const person = ref<Person | null>(null);
 const history = ref<PersonLeaderboardHistoryItem[]>([]);
 const stats = ref<PersonLeaderboardStats | null>(null);
 const selectedTagIds = ref<string[]>([]);
+const isEditing = ref(false);
 const form = reactive({
   name: "",
   note: "",
@@ -39,6 +40,9 @@ const form = reactive({
 let loadVersion = 0;
 
 const canSave = computed(() => form.name.trim().length > 0);
+const selectedTags = computed(() =>
+  tagsStore.tags.filter((tag) => selectedTagIds.value.includes(tag.id))
+);
 
 function fillForm(nextPerson: Person, tagIds: string[]): void {
   form.name = nextPerson.name;
@@ -48,13 +52,34 @@ function fillForm(nextPerson: Person, tagIds: string[]): void {
 }
 
 function toggleTag(tagId: string): void {
+  if (!isEditing.value) {
+    return;
+  }
+
   selectedTagIds.value = selectedTagIds.value.includes(tagId)
     ? selectedTagIds.value.filter((id) => id !== tagId)
     : [...selectedTagIds.value, tagId];
 }
 
+function startEdit(): void {
+  if (!person.value) {
+    return;
+  }
+
+  isEditing.value = true;
+}
+
+function cancelEdit(): void {
+  if (!person.value) {
+    return;
+  }
+
+  fillForm(person.value, peopleStore.tagIdsByPersonId[person.value.id] ?? selectedTagIds.value);
+  isEditing.value = false;
+}
+
 async function save(): Promise<void> {
-  if (!person.value || !canSave.value) {
+  if (!person.value || !isEditing.value || !canSave.value) {
     return;
   }
 
@@ -69,24 +94,12 @@ async function save(): Promise<void> {
     person.value = updated;
     fillForm(updated, selectedTagIds.value);
     workspaceTabs.updateTabTitle("person", updated.id, updated.name);
-  }
-}
-
-async function toggleArchived(): Promise<void> {
-  if (!person.value) {
-    return;
-  }
-
-  await peopleStore.archivePerson(person.value.id, !form.archived);
-  const updated = await getPerson(person.value.id);
-  if (updated) {
-    person.value = updated;
-    fillForm(updated, selectedTagIds.value);
+    isEditing.value = false;
   }
 }
 
 async function remove(): Promise<void> {
-  if (!person.value) {
+  if (!person.value || !isEditing.value) {
     return;
   }
 
@@ -112,6 +125,7 @@ async function loadPersonDetail(personId: string): Promise<void> {
   person.value = null;
   history.value = [];
   stats.value = null;
+  isEditing.value = false;
 
   const [loadedPerson, tagIds] = await Promise.all([
     getPerson(personId),
@@ -149,11 +163,7 @@ watch(
 
 <template>
   <section class="page detail-page">
-    <PageHeader :title="person?.name ?? '人员详情'">
-      <button v-if="person" class="button" type="button" @click="toggleArchived">
-        {{ form.archived ? "取消归档" : "归档" }}
-      </button>
-    </PageHeader>
+    <PageHeader :title="person?.name ?? '人员详情'" />
 
     <section v-if="!person" class="panel">
       <p class="empty">未找到该人员。</p>
@@ -193,10 +203,33 @@ watch(
 
       <aside class="detail-side">
         <section class="panel">
-          <form class="form-grid" @submit.prevent="save">
-            <div class="section-title">
-              <h2>资料</h2>
-            </div>
+          <div class="section-title">
+            <h2>资料</h2>
+            <button v-if="!isEditing" class="button" type="button" @click="startEdit">编辑</button>
+          </div>
+
+          <div v-if="!isEditing" class="profile-readonly">
+            <dl class="detail-list">
+              <dt>姓名</dt>
+              <dd>{{ person.name }}</dd>
+              <dt>备注</dt>
+              <dd>{{ person.note || "-" }}</dd>
+              <dt>状态</dt>
+              <dd>{{ person.archived ? "已归档" : "正常" }}</dd>
+              <dt>标签</dt>
+              <dd>
+                <span v-if="selectedTags.length === 0">-</span>
+                <span v-else class="inline-tags readonly-tags">
+                  <span v-for="tag in selectedTags" :key="tag.id" class="mini-tag">
+                    <span class="tag-dot" :style="{ backgroundColor: tag.color }" />
+                    {{ tag.name }}
+                  </span>
+                </span>
+              </dd>
+            </dl>
+          </div>
+
+          <form v-else class="form-grid" @submit.prevent="save">
             <label>
               <span>姓名</span>
               <input v-model="form.name" class="field" />
@@ -229,6 +262,7 @@ watch(
 
             <div class="actions-row">
               <button class="button primary" type="submit" :disabled="!canSave">保存</button>
+              <button class="button" type="button" @click="cancelEdit">取消</button>
               <button class="button danger" type="button" @click="remove">删除</button>
             </div>
           </form>

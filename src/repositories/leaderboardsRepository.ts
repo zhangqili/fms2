@@ -1,5 +1,8 @@
 import { db } from "@/db";
 import type { Leaderboard, LeaderboardEntry, Person } from "@/types/models";
+import { nowIso } from "@/utils/dates";
+import { makeId } from "@/utils/ids";
+import { rankDraftItems } from "@/utils/ranking";
 
 export interface PersonLeaderboardHistoryItem {
   leaderboard: Leaderboard;
@@ -38,6 +41,28 @@ export interface LeaderboardSummary {
   outCount: number;
 }
 
+export interface CreateLeaderboardScoreInput {
+  personId: string;
+  score: number;
+}
+
+export interface CreateLeaderboardInput {
+  title: string;
+  note?: string;
+  boardDate?: string | null;
+  filterTagIds?: string[];
+  maxEntries?: number | null;
+  templateLeaderboardId?: string | null;
+  previousLeaderboardId?: string | null;
+  scores: CreateLeaderboardScoreInput[];
+}
+
+export interface LeaderboardCreationContext {
+  previousLeaderboard: Leaderboard | null;
+  previousEntries: LeaderboardEntry[];
+  appearedPersonIds: string[];
+}
+
 export async function listLeaderboards(): Promise<Leaderboard[]> {
   const leaderboards = await db.leaderboards.orderBy("createdAt").reverse().toArray();
   return leaderboards;
@@ -49,6 +74,186 @@ export async function getLeaderboard(id: string): Promise<Leaderboard | undefine
 
 export async function getLatestLeaderboard(): Promise<Leaderboard | undefined> {
   return db.leaderboards.orderBy("createdAt").last();
+}
+
+export async function getLeaderboardCreationContext(
+  boardDate: string | null = null
+): Promise<LeaderboardCreationContext> {
+  const [leaderboards, allEntries] = await Promise.all([
+    db.leaderboards.toArray(),
+    db.leaderboard_entries.toArray()
+  ]);
+  const previousLeaderboard = findPreviousLeaderboardForDate(leaderboards, boardDate);
+  const historicalLeaderboardIds = new Set(
+    leaderboards
+      .filter((leaderboard) => isLeaderboardBeforeDate(leaderboard, boardDate))
+      .map((leaderboard) => leaderboard.id)
+  );
+  const previousEntries = previousLeaderboard
+    ? sortLeaderboardEntries(
+      allEntries.filter(
+        (entry) => entry.leaderboardId === previousLeaderboard.id && entry.includedInRanking
+      )
+    )
+    : [];
+  const appearedPersonIds = [
+    ...new Set(
+      allEntries
+        .filter((entry) => entry.includedInRanking && historicalLeaderboardIds.has(entry.leaderboardId))
+        .map((entry) => entry.personId)
+    )
+  ];
+
+  return {
+    previousLeaderboard: previousLeaderboard ?? null,
+    previousEntries,
+    appearedPersonIds
+  };
+}
+
+export async function createLeaderboard(input: CreateLeaderboardInput): Promise<Leaderboard> {
+  const timestamp = nowIso();
+  const boardDate = normalizedBoardDate(input.boardDate ?? null);
+  const previousLeaderboardId = input.previousLeaderboardId ?? null;
+  const [
+    people,
+    tags,
+    personTags,
+    leaderboards,
+    previousEntries,
+    historicalEntries
+  ] = await Promise.all([
+    db.people.toArray(),
+    db.tags.toArray(),
+    db.person_tags.toArray(),
+    db.leaderboards.toArray(),
+    previousLeaderboardId
+      ? db.leaderboard_entries.where("leaderboardId").equals(previousLeaderboardId).toArray()
+      : Promise.resolve([]),
+    db.leaderboard_entries.toArray()
+  ]);
+  const personById = new Map(people.map((person) => [person.id, person]));
+  const previousIncludedByPersonId = new Map(
+    previousEntries
+      .filter((entry) => entry.includedInRanking)
+      .map((entry) => [entry.personId, entry])
+  );
+  const historicalLeaderboardIds = new Set(
+    leaderboards
+      .filter((leaderboard) => isLeaderboardBeforeDate(leaderboard, boardDate))
+      .map((leaderboard) => leaderboard.id)
+  );
+  const appearedPersonIds = new Set(
+    historicalEntries
+      .filter((entry) => entry.includedInRanking && historicalLeaderboardIds.has(entry.leaderboardId))
+      .map((entry) => entry.personId)
+  );
+  const tagNameById = new Map(tags.map((tag) => [tag.id, tag.name]));
+  const tagNamesByPersonId = new Map<string, string[]>();
+
+  for (const relation of personTags) {
+    const tagName = tagNameById.get(relation.tagId);
+    if (!tagName) {
+      continue;
+    }
+
+    const tagNames = tagNamesByPersonId.get(relation.personId) ?? [];
+    tagNames.push(tagName);
+    tagNamesByPersonId.set(relation.personId, tagNames);
+  }
+
+  const scoreByPersonId = new Map<string, number>();
+  for (const item of input.scores) {
+    const score = Number(item.score);
+    if (!Number.isFinite(score) || score < 0) {
+      throw new Error("分数不能小于 0，也不能是空值。");
+    }
+
+    scoreByPersonId.set(item.personId, score);
+  }
+
+  const rankedItems = rankDraftItems(
+    [...scoreByPersonId.entries()]
+      .filter(([_personId, score]) => score > 0)
+      .map(([personId, score]) => {
+        const person = personById.get(personId);
+        return person
+          ? {
+            person,
+            score,
+            previousEntry: previousIncludedByPersonId.get(personId),
+            appearedBefore: appearedPersonIds.has(personId)
+          }
+          : null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+  );
+  const leaderboard: Leaderboard = {
+    id: makeId("leaderboard"),
+    title: input.title.trim(),
+    note: input.note?.trim() ?? "",
+    boardDate,
+    legacyDigitalDate: boardDate ? isoDateToDigitalDate(boardDate) : null,
+    filterTagIds: input.filterTagIds ?? [],
+    maxEntries: input.maxEntries ?? null,
+    templateLeaderboardId: input.templateLeaderboardId ?? previousLeaderboardId,
+    previousLeaderboardId,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+  const entries: LeaderboardEntry[] = rankedItems.map((item) => {
+    const previousEntry = previousIncludedByPersonId.get(item.person.id);
+    return {
+      id: makeId("leaderboard_entry"),
+      leaderboardId: leaderboard.id,
+      personId: item.person.id,
+      personNameSnapshot: item.person.name,
+      tagSnapshots: tagNamesByPersonId.get(item.person.id) ?? [],
+      rank: item.rank,
+      previousRank: item.previousRank,
+      rankDelta: item.rankDelta,
+      movement: item.movement,
+      scoreSnapshot: item.score,
+      previousScoreSnapshot: previousEntry?.scoreSnapshot ?? null,
+      includedInRanking: true,
+      noteSnapshot: item.person.note,
+      createdAt: timestamp
+    };
+  });
+  const currentPersonIds = new Set(rankedItems.map((item) => item.person.id));
+
+  for (const previousEntry of previousIncludedByPersonId.values()) {
+    if (currentPersonIds.has(previousEntry.personId)) {
+      continue;
+    }
+
+    const person = personById.get(previousEntry.personId);
+    entries.push({
+      id: makeId("leaderboard_entry"),
+      leaderboardId: leaderboard.id,
+      personId: previousEntry.personId,
+      personNameSnapshot: person?.name ?? previousEntry.personNameSnapshot,
+      tagSnapshots: person ? tagNamesByPersonId.get(person.id) ?? [] : previousEntry.tagSnapshots,
+      rank: null,
+      previousRank: previousEntry.rank,
+      rankDelta: null,
+      movement: "out",
+      scoreSnapshot: null,
+      previousScoreSnapshot: previousEntry.scoreSnapshot,
+      includedInRanking: false,
+      noteSnapshot: person?.note ?? previousEntry.noteSnapshot,
+      createdAt: timestamp
+    });
+  }
+
+  await db.transaction("rw", db.leaderboards, db.leaderboard_entries, async () => {
+    await db.leaderboards.add(leaderboard);
+    if (entries.length > 0) {
+      await db.leaderboard_entries.bulkAdd(entries);
+    }
+  });
+
+  return leaderboard;
 }
 
 export async function listLeaderboardEntries(leaderboardId: string): Promise<LeaderboardEntry[]> {
@@ -314,6 +519,46 @@ function assignOverallRanks(metrics: PersonMetricAccumulator[]): void {
 
 function countEntriesAtOrAboveRank(entries: LeaderboardEntry[], threshold: number): number {
   return entries.filter((entry) => entry.rank !== null && entry.rank > 0 && entry.rank <= threshold).length;
+}
+
+function normalizedBoardDate(value: string | null): string | null {
+  const text = value?.trim();
+  return text && /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function isoDateToDigitalDate(value: string): number | null {
+  const text = value.replaceAll("-", "");
+  return /^\d{8}$/.test(text) ? Number(text) : null;
+}
+
+function findPreviousLeaderboardForDate(
+  leaderboards: Leaderboard[],
+  boardDate: string | null
+): Leaderboard | null {
+  const targetKey = boardDate ? isoDateToDigitalDate(boardDate) : null;
+  const candidates = targetKey === null
+    ? leaderboards
+    : leaderboards.filter((leaderboard) => leaderboardDateKey(leaderboard) < targetKey);
+
+  return [...candidates].sort((left, right) => {
+    const dateDelta = leaderboardDateKey(right) - leaderboardDateKey(left);
+    return dateDelta !== 0 ? dateDelta : right.createdAt.localeCompare(left.createdAt);
+  })[0] ?? null;
+}
+
+function isLeaderboardBeforeDate(leaderboard: Leaderboard, boardDate: string | null): boolean {
+  const targetKey = boardDate ? isoDateToDigitalDate(boardDate) : null;
+  return targetKey === null ? true : leaderboardDateKey(leaderboard) < targetKey;
+}
+
+function leaderboardDateKey(leaderboard: Leaderboard): number {
+  if (leaderboard.legacyDigitalDate !== null) {
+    return leaderboard.legacyDigitalDate;
+  }
+
+  const source = leaderboard.boardDate ?? leaderboard.createdAt.slice(0, 10);
+  const text = source.slice(0, 10).replaceAll("-", "");
+  return /^\d{8}$/.test(text) ? Number(text) : 0;
 }
 
 function isEffectiveScoredEntry(entry: LeaderboardEntry): boolean {

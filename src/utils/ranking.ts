@@ -17,7 +17,7 @@ export interface RankedDraftItem {
 }
 
 export function rankDraftItems(items: RankingDraftItem[]): RankedDraftItem[] {
-  const sorted = [...items].sort((left, right) => {
+  const sorted = items.filter((item) => item.score > 0).sort((left, right) => {
     if (right.score !== left.score) {
       return right.score - left.score;
     }
