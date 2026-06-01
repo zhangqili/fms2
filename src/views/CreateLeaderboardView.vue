@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader.vue";
 import ScoreInput from "@/components/ScoreInput.vue";
 import {
   getLeaderboardCreationContext,
+  leaderboardDisplayDate,
   leaderboardDisplayTitle
 } from "@/repositories/leaderboardsRepository";
 import { useLeaderboardsStore } from "@/stores/leaderboardsStore";
@@ -57,6 +58,7 @@ const saveError = ref("");
 const draftMessage = ref("");
 const draftSavedAt = ref<string | null>(null);
 const initialized = ref(false);
+const rowOrderPersonIds = ref<string[]>([]);
 let contextLoadVersion = 0;
 
 const previewItems = computed(() =>
@@ -79,28 +81,19 @@ const outPreviewEntries = computed(() =>
   previousEntries.value.filter((entry) => !includedPersonIds.value.has(entry.personId))
 );
 const sortedDraftRows = computed(() => {
-  const previewRankByPersonId = new Map(previewItems.value.map((item) => [item.person.id, item.rank]));
+  const orderByPersonId = new Map(
+    rowOrderPersonIds.value.map((personId, index) => [personId, index])
+  );
   return [...draftRows.value].sort((left, right) => {
-    const leftRank = previewRankByPersonId.get(left.person.id);
-    const rightRank = previewRankByPersonId.get(right.person.id);
-    if (leftRank !== undefined || rightRank !== undefined) {
-      return (leftRank ?? Number.POSITIVE_INFINITY) - (rightRank ?? Number.POSITIVE_INFINITY);
+    const orderDelta =
+      (orderByPersonId.get(left.person.id) ?? Number.POSITIVE_INFINITY) -
+      (orderByPersonId.get(right.person.id) ?? Number.POSITIVE_INFINITY);
+
+    if (orderDelta !== 0) {
+      return orderDelta;
     }
 
-    const leftWasOut = left.previousEntry ? 0 : 1;
-    const rightWasOut = right.previousEntry ? 0 : 1;
-    if (leftWasOut !== rightWasOut) {
-      return leftWasOut - rightWasOut;
-    }
-
-    const previousRankDelta =
-      (left.previousEntry?.rank ?? Number.POSITIVE_INFINITY) -
-      (right.previousEntry?.rank ?? Number.POSITIVE_INFINITY);
-    if (previousRankDelta !== 0) {
-      return previousRankDelta;
-    }
-
-    return left.person.name.localeCompare(right.person.name, "zh-CN");
+    return compareDraftRowsByCurrentRank(left, right);
   });
 });
 const includedCount = computed(() => previewItems.value.length);
@@ -121,6 +114,37 @@ const draftStatusText = computed(() => {
 
   return draftSavedAt.value ? `草稿已保存：${formatSavedAt(draftSavedAt.value)}` : "暂无已保存草稿";
 });
+
+function compareDraftRowsByCurrentRank(left: DraftRow, right: DraftRow): number {
+  const previewRankByPersonId = new Map(previewItems.value.map((item) => [item.person.id, item.rank]));
+
+  const leftRank = previewRankByPersonId.get(left.person.id);
+  const rightRank = previewRankByPersonId.get(right.person.id);
+  if (leftRank !== undefined || rightRank !== undefined) {
+    return (leftRank ?? Number.POSITIVE_INFINITY) - (rightRank ?? Number.POSITIVE_INFINITY);
+  }
+
+  const leftWasOut = left.previousEntry ? 0 : 1;
+  const rightWasOut = right.previousEntry ? 0 : 1;
+  if (leftWasOut !== rightWasOut) {
+    return leftWasOut - rightWasOut;
+  }
+
+  const previousRankDelta =
+    (left.previousEntry?.rank ?? Number.POSITIVE_INFINITY) -
+    (right.previousEntry?.rank ?? Number.POSITIVE_INFINITY);
+  if (previousRankDelta !== 0) {
+    return previousRankDelta;
+  }
+
+  return left.person.name.localeCompare(right.person.name, "zh-CN");
+}
+
+function refreshDraftRowOrder(): void {
+  rowOrderPersonIds.value = [...draftRows.value]
+    .sort(compareDraftRowsByCurrentRank)
+    .map((row) => row.person.id);
+}
 
 async function loadDraft(): Promise<void> {
   loading.value = true;
@@ -191,7 +215,7 @@ async function saveLeaderboard(): Promise<void> {
     removeSavedDraft();
     workspaceTabs.openLeaderboardTab(
       leaderboard.id,
-      leaderboardDisplayTitle(leaderboard),
+      leaderboardDisplayDate(leaderboard),
       `/leaderboards/${leaderboard.id}`
     );
     await router.push(`/leaderboards/${leaderboard.id}`);
@@ -235,6 +259,7 @@ function clearScores(): void {
     ...row,
     score: 0
   }));
+  refreshDraftRowOrder();
 }
 
 function mergeDraftRows(options: {
@@ -264,6 +289,7 @@ function mergeDraftRows(options: {
       previousEntry
     };
   });
+  refreshDraftRowOrder();
 }
 
 function previewForPerson(personId: string): RankedDraftItem | undefined {
@@ -463,7 +489,7 @@ onMounted(() => {
                 </template>
                 <template v-else>-</template>
               </span>
-              <ScoreInput v-model="row.score" :min="0" />
+              <ScoreInput v-model="row.score" :min="0" @commit="refreshDraftRowOrder" />
             </label>
           </div>
         </div>

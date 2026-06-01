@@ -7,8 +7,11 @@ export interface TagWithUsage extends Tag {
   usageCount: number;
 }
 
+export type TagMoveDirection = "up" | "down";
+
 export async function listTags(): Promise<Tag[]> {
-  return db.tags.orderBy("sortOrder").toArray();
+  const tags = await db.tags.toArray();
+  return sortTagsByOrder(tags);
 }
 
 export async function listTagsWithUsage(): Promise<TagWithUsage[]> {
@@ -33,7 +36,7 @@ export async function createTag(name: string, color = "#245c73"): Promise<Tag> {
     id: makeId("tag"),
     name: trimmedName,
     color,
-    sortOrder: Date.now(),
+    sortOrder: await nextTagSortOrder(),
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -62,6 +65,24 @@ export async function deleteTag(id: string): Promise<void> {
   });
 }
 
+export async function moveTag(id: string, direction: TagMoveDirection): Promise<void> {
+  const tags = await listTags();
+  const index = tags.findIndex((tag) => tag.id === id);
+  const targetIndex = direction === "up" ? index - 1 : index + 1;
+
+  if (index < 0 || targetIndex < 0 || targetIndex >= tags.length) {
+    return;
+  }
+
+  const reorderedTags = [...tags];
+  [reorderedTags[index], reorderedTags[targetIndex]] = [
+    reorderedTags[targetIndex],
+    reorderedTags[index]
+  ];
+
+  await normalizeTagSortOrders(reorderedTags);
+}
+
 export async function attachTag(personId: string, tagId: string): Promise<PersonTag> {
   const existing = await db.person_tags.where("[personId+tagId]").equals([personId, tagId]).first();
   if (existing) {
@@ -81,4 +102,45 @@ export async function attachTag(personId: string, tagId: string): Promise<Person
 
 export async function detachTag(personId: string, tagId: string): Promise<void> {
   await db.person_tags.where("[personId+tagId]").equals([personId, tagId]).delete();
+}
+
+function sortTagsByOrder(tags: Tag[]): Tag[] {
+  return [...tags].sort((left, right) => {
+    const orderDelta = tagSortOrder(left) - tagSortOrder(right);
+    if (orderDelta !== 0) {
+      return orderDelta;
+    }
+
+    const createdAtDelta = left.createdAt.localeCompare(right.createdAt);
+    if (createdAtDelta !== 0) {
+      return createdAtDelta;
+    }
+
+    return left.name.localeCompare(right.name, "zh-CN");
+  });
+}
+
+async function nextTagSortOrder(): Promise<number> {
+  const tags = await db.tags.toArray();
+  const maxSortOrder = tags.reduce(
+    (max, tag) => Math.max(max, Number.isFinite(tag.sortOrder) ? tag.sortOrder : 0),
+    0
+  );
+
+  return maxSortOrder + 1000;
+}
+
+async function normalizeTagSortOrders(tags: Tag[]): Promise<void> {
+  const timestamp = nowIso();
+  await db.tags.bulkPut(
+    tags.map((tag, index) => ({
+      ...tag,
+      sortOrder: (index + 1) * 1000,
+      updatedAt: timestamp
+    }))
+  );
+}
+
+function tagSortOrder(tag: Tag): number {
+  return Number.isFinite(tag.sortOrder) ? tag.sortOrder : Number.POSITIVE_INFINITY;
 }

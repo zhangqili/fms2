@@ -5,7 +5,9 @@ import {
   createTag,
   deleteTag,
   listTagsWithUsage,
+  moveTag as moveStoredTag,
   updateTag,
+  type TagMoveDirection,
   type TagWithUsage
 } from "@/repositories/tagsRepository";
 import type { Tag } from "@/types/models";
@@ -38,12 +40,18 @@ export const useTagsStore = defineStore("tags", () => {
     await loadTags();
   }
 
+  async function moveTag(id: string, direction: TagMoveDirection): Promise<void> {
+    await moveStoredTag(id, direction);
+    await loadTags();
+  }
+
   return {
     tags,
     loading,
     loadTags,
     addTag,
     saveTag,
-    removeTag
+    removeTag,
+    moveTag
   };
 });

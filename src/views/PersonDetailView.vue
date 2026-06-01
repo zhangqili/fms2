@@ -5,8 +5,9 @@ import { RouterLink, useRouter } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import {
   getPersonLeaderboardStats,
+  leaderboardDisplayDate,
   leaderboardDisplayDateSource,
-  leaderboardDisplayTitle,
+  leaderboardDisplayOptionalTitle,
   listPersonLeaderboardHistory,
   type PersonLeaderboardHistoryItem,
   type PersonLeaderboardStats
@@ -116,7 +117,7 @@ async function remove(): Promise<void> {
 function openLeaderboardTab(item: PersonLeaderboardHistoryItem): void {
   workspaceTabs.openLeaderboardTab(
     item.leaderboard.id,
-    leaderboardDisplayTitle(item.leaderboard)
+    leaderboardDisplayDate(item.leaderboard)
   );
 }
 
@@ -184,19 +185,21 @@ watch(
               <span>排名</span>
               <span>变化</span>
             </div>
-            <div v-for="item in history" :key="item.entry.id" class="table-row">
+            <RouterLink
+              v-for="item in history"
+              :key="item.entry.id"
+              class="table-row"
+              :to="`/leaderboards/${item.leaderboard.id}`"
+              @click="openLeaderboardTab(item)"
+            >
               <span>{{ displayDate(leaderboardDisplayDateSource(item.leaderboard)) }}</span>
-              <RouterLink
-                class="table-link"
-                :to="`/leaderboards/${item.leaderboard.id}`"
-                @click="openLeaderboardTab(item)"
-              >
-                {{ leaderboardDisplayTitle(item.leaderboard) }}
-              </RouterLink>
+              <span class="table-link">
+                {{ leaderboardDisplayOptionalTitle(item.leaderboard) }}
+              </span>
               <span>{{ formatScore(item.entry.scoreSnapshot) }}</span>
               <span>{{ item.entry.rank ?? "出榜" }}</span>
               <span>{{ movementText(item.entry) }}</span>
-            </div>
+            </RouterLink>
           </div>
         </section>
       </main>

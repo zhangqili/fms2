@@ -3,7 +3,10 @@ import { onMounted } from "vue";
 import { RouterLink } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
-import { leaderboardDisplayTitle } from "@/repositories/leaderboardsRepository";
+import {
+  leaderboardDisplayDate,
+  leaderboardDisplayOptionalTitle
+} from "@/repositories/leaderboardsRepository";
 import { useLeaderboardsStore } from "@/stores/leaderboardsStore";
 import { useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
 import type { Leaderboard } from "@/types/models";
@@ -12,7 +15,7 @@ const leaderboardsStore = useLeaderboardsStore();
 const workspaceTabs = useWorkspaceTabsStore();
 
 function openLeaderboardTab(leaderboard: Leaderboard): void {
-  workspaceTabs.openLeaderboardTab(leaderboard.id, leaderboardDisplayTitle(leaderboard));
+  workspaceTabs.openLeaderboardTab(leaderboard.id, leaderboardDisplayDate(leaderboard));
 }
 
 onMounted(() => {
@@ -31,12 +34,12 @@ onMounted(() => {
       <RouterLink
         v-for="leaderboard in leaderboardsStore.leaderboards"
         :key="leaderboard.id"
-        class="list-row"
+        class="list-row leaderboard-list-row"
         :to="`/leaderboards/${leaderboard.id}`"
         @click="openLeaderboardTab(leaderboard)"
       >
-        <span class="list-title">{{ leaderboard.title || "未命名榜单" }}</span>
-        <span class="list-meta">{{ leaderboard.boardDate || leaderboard.createdAt.slice(0, 10) }}</span>
+        <span class="list-title leaderboard-list-date">{{ leaderboardDisplayDate(leaderboard) }}</span>
+        <span class="list-meta leaderboard-list-title">{{ leaderboardDisplayOptionalTitle(leaderboard) }}</span>
       </RouterLink>
     </section>
   </section>

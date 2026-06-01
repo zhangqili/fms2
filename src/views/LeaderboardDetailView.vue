@@ -5,8 +5,8 @@ import { RouterLink } from "vue-router";
 import PageHeader from "@/components/PageHeader.vue";
 import {
   getLeaderboard,
+  leaderboardDisplayDate,
   leaderboardDisplayDateSource,
-  leaderboardDisplayTitle,
   listLeaderboardEntries,
   summarizeLeaderboardEntries
 } from "@/repositories/leaderboardsRepository";
@@ -48,7 +48,7 @@ async function loadLeaderboardDetail(leaderboardId: string): Promise<void> {
     workspaceTabs.updateTabTitle(
       "leaderboard",
       nextLeaderboard.id,
-      leaderboardDisplayTitle(nextLeaderboard)
+      leaderboardDisplayDate(nextLeaderboard)
     );
   }
 }
@@ -87,18 +87,20 @@ watch(
               <span>分数</span>
               <span>变化</span>
             </div>
-            <div v-for="entry in includedEntries" :key="entry.id" class="table-row">
+            <RouterLink
+              v-for="entry in includedEntries"
+              :key="entry.id"
+              class="table-row"
+              :to="`/people/${entry.personId}`"
+              @click="openPersonTab(entry)"
+            >
               <span>{{ entry.rank ?? "-" }}</span>
-              <RouterLink
-                class="table-link"
-                :to="`/people/${entry.personId}`"
-                @click="openPersonTab(entry)"
-              >
+              <span class="table-link">
                 {{ entry.personNameSnapshot }}
-              </RouterLink>
+              </span>
               <span>{{ formatScore(entry.scoreSnapshot) }}</span>
               <span>{{ movementText(entry) }}</span>
-            </div>
+            </RouterLink>
           </div>
         </section>
       </main>
@@ -134,18 +136,20 @@ watch(
               <span>上期分数</span>
               <span>状态</span>
             </div>
-            <div v-for="entry in outEntries" :key="entry.id" class="table-row">
-              <RouterLink
-                class="table-link"
-                :to="`/people/${entry.personId}`"
-                @click="openPersonTab(entry)"
-              >
+            <RouterLink
+              v-for="entry in outEntries"
+              :key="entry.id"
+              class="table-row"
+              :to="`/people/${entry.personId}`"
+              @click="openPersonTab(entry)"
+            >
+              <span class="table-link">
                 {{ entry.personNameSnapshot }}
-              </RouterLink>
+              </span>
               <span>{{ entry.previousRank ?? "-" }}</span>
               <span>{{ formatScore(entry.previousScoreSnapshot) }}</span>
               <span>{{ movementText(entry) }}</span>
-            </div>
+            </RouterLink>
           </div>
         </section>
       </aside>

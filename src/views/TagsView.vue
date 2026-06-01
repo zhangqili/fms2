@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { ArrowDown, ArrowUp } from "lucide-vue-next";
 
 import PageHeader from "@/components/PageHeader.vue";
 import { useTagsStore } from "@/stores/tagsStore";
@@ -47,6 +48,10 @@ async function removeTag(tag: Tag): Promise<void> {
   await tagsStore.removeTag(tag.id);
 }
 
+async function moveTag(tag: Tag, direction: "up" | "down"): Promise<void> {
+  await tagsStore.moveTag(tag.id, direction);
+}
+
 onMounted(() => {
   void tagsStore.loadTags();
 });
@@ -64,7 +69,29 @@ onMounted(() => {
 
     <section class="panel">
       <p v-if="tagsStore.tags.length === 0" class="empty">还没有标签。</p>
-      <div v-for="tag in tagsStore.tags" :key="tag.id" class="editable-row">
+      <div v-for="(tag, index) in tagsStore.tags" :key="tag.id" class="editable-row tag-edit-row">
+        <div class="tag-sort-actions">
+          <button
+            class="button icon-button"
+            type="button"
+            :disabled="index === 0 || tagsStore.loading"
+            :aria-label="`上移 ${tag.name}`"
+            :title="`上移 ${tag.name}`"
+            @click="moveTag(tag, 'up')"
+          >
+            <ArrowUp :size="16" />
+          </button>
+          <button
+            class="button icon-button"
+            type="button"
+            :disabled="index === tagsStore.tags.length - 1 || tagsStore.loading"
+            :aria-label="`下移 ${tag.name}`"
+            :title="`下移 ${tag.name}`"
+            @click="moveTag(tag, 'down')"
+          >
+            <ArrowDown :size="16" />
+          </button>
+        </div>
         <input v-model="ensureEditState(tag).name" class="field" />
         <input
           v-model="ensureEditState(tag).color"

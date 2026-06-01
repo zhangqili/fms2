@@ -9,7 +9,7 @@ import {
 } from "@/repositories/leaderboardsRepository";
 import { usePeopleStore } from "@/stores/peopleStore";
 import { useTagsStore } from "@/stores/tagsStore";
-import type { Person } from "@/types/models";
+import type { Person, Tag } from "@/types/models";
 
 const peopleStore = usePeopleStore();
 const tagsStore = useTagsStore();
@@ -18,8 +18,8 @@ const newNote = ref("");
 const query = ref("");
 const newPersonTagIds = ref<string[]>([]);
 const overallMetrics = ref<PersonOverallMetric[]>([]);
+const isAddPersonOpen = ref(false);
 
-const tagsById = computed(() => new Map(tagsStore.tags.map((tag) => [tag.id, tag])));
 const overallMetricByPersonId = computed(
   () => new Map(overallMetrics.value.map((metric) => [metric.personId, metric]))
 );
@@ -41,6 +41,7 @@ async function addPerson(): Promise<void> {
   newName.value = "";
   newNote.value = "";
   newPersonTagIds.value = [];
+  isAddPersonOpen.value = false;
 }
 
 function toggleNewPersonTag(tagId: string): void {
@@ -63,11 +64,9 @@ async function loadOverallMetrics(): Promise<void> {
   overallMetrics.value = await listPersonOverallMetrics();
 }
 
-function tagNamesForPerson(personId: string): string[] {
-  const tagIds = peopleStore.tagIdsByPersonId[personId] ?? [];
-  return tagIds
-    .map((tagId) => tagsById.value.get(tagId)?.name)
-    .filter((name): name is string => typeof name === "string");
+function tagsForPerson(personId: string): Tag[] {
+  const tagIds = new Set(peopleStore.tagIdsByPersonId[personId] ?? []);
+  return tagsStore.tags.filter((tag) => tagIds.has(tag.id));
 }
 
 function metricForPerson(personId: string): PersonOverallMetric | undefined {
@@ -93,6 +92,10 @@ function sortPeopleByOverallRank(left: Person, right: Person): number {
   return left.name.localeCompare(right.name, "zh-CN");
 }
 
+function toggleAddPersonPanel(): void {
+  isAddPersonOpen.value = !isAddPersonOpen.value;
+}
+
 onMounted(async () => {
   await Promise.all([tagsStore.loadTags(), peopleStore.loadPeople(), loadOverallMetrics()]);
 });
@@ -100,7 +103,11 @@ onMounted(async () => {
 
 <template>
   <section class="page">
-    <PageHeader title="人员" />
+    <PageHeader title="人员">
+      <button class="button primary" type="button" @click="toggleAddPersonPanel">
+        {{ isAddPersonOpen ? "收起新增" : "新增人员" }}
+      </button>
+    </PageHeader>
 
     <div class="toolbar">
       <input v-model="query" class="field" placeholder="搜索姓名或备注" @input="refreshPeople" />
@@ -128,24 +135,34 @@ onMounted(async () => {
       </button>
     </div>
 
-    <section class="panel">
+    <section v-if="isAddPersonOpen" class="panel add-person-panel">
+      <div class="section-title">
+        <h2>新增人员</h2>
+        <button class="button" type="button" @click="toggleAddPersonPanel">收起</button>
+      </div>
       <form class="inline-form" @submit.prevent="addPerson">
         <input v-model="newName" class="field" placeholder="新人员姓名" />
         <input v-model="newNote" class="field" placeholder="备注" />
         <button class="button primary" type="submit">添加人员</button>
       </form>
-      <div v-if="tagsStore.tags.length" class="tag-picker compact">
-        <button
-          v-for="tag in tagsStore.tags"
-          :key="tag.id"
-          class="tag-chip"
-          :class="{ selected: newPersonTagIds.includes(tag.id) }"
-          type="button"
-          @click="toggleNewPersonTag(tag.id)"
-        >
-          <span class="tag-dot" :style="{ backgroundColor: tag.color }" />
-          {{ tag.name }}
-        </button>
+      <div v-if="tagsStore.tags.length" class="add-person-tags">
+        <div class="section-title compact-title">
+          <h2>标签</h2>
+          <span class="list-meta">已选 {{ newPersonTagIds.length }}</span>
+        </div>
+        <div class="tag-picker compact scrollable-tag-picker">
+          <button
+            v-for="tag in tagsStore.tags"
+            :key="tag.id"
+            class="tag-chip"
+            :class="{ selected: newPersonTagIds.includes(tag.id) }"
+            type="button"
+            @click="toggleNewPersonTag(tag.id)"
+          >
+            <span class="tag-dot" :style="{ backgroundColor: tag.color }" />
+            {{ tag.name }}
+          </button>
+        </div>
       </div>
     </section>
 
@@ -156,6 +173,9 @@ onMounted(async () => {
           <span>姓名</span>
           <span>总点数</span>
           <span>加权点数</span>
+          <span>总榜排名</span>
+          <span>峰值排名</span>
+          <span>峰值点数</span>
           <span>备注</span>
         </div>
         <PersonListItem
@@ -163,7 +183,7 @@ onMounted(async () => {
           :key="person.id"
           :person="person"
           :metric="metricForPerson(person.id)"
-          :tag-names="tagNamesForPerson(person.id)"
+          :tags="tagsForPerson(person.id)"
         />
       </div>
     </section>

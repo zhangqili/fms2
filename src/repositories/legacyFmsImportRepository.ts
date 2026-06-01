@@ -286,7 +286,9 @@ async function parseLegacyFmsWorkbook(file: File): Promise<ParsedLegacyWorkbook>
       digitalDate,
       boardDate: digitalDateToIsoDate(digitalDate),
       title,
-      entries: [...entriesByName.values()].sort((left, right) => left.sourceRank - right.sourceRank),
+      entries: rankParsedLegacyEntries(
+        [...entriesByName.values()].sort((left, right) => left.sourceRank - right.sourceRank)
+      ),
       zeroScoreEntries: [...zeroEntriesByName.values()]
     });
   }
@@ -298,6 +300,30 @@ async function parseLegacyFmsWorkbook(file: File): Promise<ParsedLegacyWorkbook>
     leaderboards,
     errors
   };
+}
+
+function rankParsedLegacyEntries(entries: ParsedLegacyEntry[]): ParsedLegacyEntry[] {
+  let previousScoreKey: string | null = null;
+  let currentRank = 0;
+
+  return entries.map((entry, index) => {
+    const scoreKey = numericRankKey(entry.score);
+
+    if (previousScoreKey === null || scoreKey !== previousScoreKey) {
+      currentRank = index + 1;
+    }
+
+    previousScoreKey = scoreKey;
+
+    return {
+      ...entry,
+      sourceRank: currentRank
+    };
+  });
+}
+
+function numericRankKey(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(10) : String(value);
 }
 
 function toDigitalDate(value: unknown): number | null {

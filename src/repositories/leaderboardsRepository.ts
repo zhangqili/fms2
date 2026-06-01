@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import type { Leaderboard, LeaderboardEntry, Person } from "@/types/models";
-import { nowIso } from "@/utils/dates";
+import { displayDate, nowIso } from "@/utils/dates";
 import { makeId } from "@/utils/ids";
 import { rankDraftItems } from "@/utils/ranking";
 
@@ -403,6 +403,14 @@ export function leaderboardDisplayTitle(leaderboard: Leaderboard): string {
   return leaderboard.title || "未命名榜单";
 }
 
+export function leaderboardDisplayOptionalTitle(leaderboard: Leaderboard): string {
+  return leaderboard.title.trim();
+}
+
+export function leaderboardDisplayDate(leaderboard: Leaderboard): string {
+  return displayDate(leaderboardDisplayDateSource(leaderboard));
+}
+
 export function leaderboardDisplayDateSource(leaderboard: Leaderboard): string | null {
   return leaderboard.boardDate ?? leaderboard.createdAt ?? null;
 }
@@ -443,9 +451,13 @@ function assignPeakTierRanks(metrics: PersonMetricAccumulator[]): void {
     return sortMetricByName(left, right);
   });
 
-  sorted.forEach((metric, index) => {
-    metric.peakTierRank = index + 1;
-  });
+  assignCompetitionRanks(
+    sorted,
+    (metric) => peakTierRankKey(metric, rankThresholds),
+    (metric, rank) => {
+      metric.peakTierRank = rank;
+    }
+  );
 }
 
 function assignWeightedRanks(metrics: PersonMetricAccumulator[]): void {
@@ -464,9 +476,13 @@ function assignWeightedRanks(metrics: PersonMetricAccumulator[]): void {
     return sortMetricByName(left, right);
   });
 
-  sorted.forEach((metric, index) => {
-    metric.weightedRank = index + 1;
-  });
+  assignCompetitionRanks(
+    sorted,
+    (metric) => numericRankKey(metric.weightedScore),
+    (metric, rank) => {
+      metric.weightedRank = rank;
+    }
+  );
 }
 
 function assignScoreRanks(metrics: PersonMetricAccumulator[]): void {
@@ -485,19 +501,19 @@ function assignScoreRanks(metrics: PersonMetricAccumulator[]): void {
     return sortMetricByName(left, right);
   });
 
-  sorted.forEach((metric, index) => {
-    metric.scoreRank = index + 1;
-  });
+  assignCompetitionRanks(
+    sorted,
+    (metric) => numericRankKey(metric.totalScore),
+    (metric, rank) => {
+      metric.scoreRank = rank;
+    }
+  );
 }
 
 function assignOverallRanks(metrics: PersonMetricAccumulator[]): void {
   const sorted = [...metrics].sort((left, right) => {
-    const leftAverageScore =
-      (left.peakTierRank ?? Number.POSITIVE_INFINITY) +
-      (left.weightedRank ?? Number.POSITIVE_INFINITY);
-    const rightAverageScore =
-      (right.peakTierRank ?? Number.POSITIVE_INFINITY) +
-      (right.weightedRank ?? Number.POSITIVE_INFINITY);
+    const leftAverageScore = overallRankScore(left);
+    const rightAverageScore = overallRankScore(right);
 
     if (leftAverageScore !== rightAverageScore) {
       return leftAverageScore - rightAverageScore;
@@ -512,9 +528,50 @@ function assignOverallRanks(metrics: PersonMetricAccumulator[]): void {
     return sortMetricByName(left, right);
   });
 
-  sorted.forEach((metric, index) => {
-    metric.overallRank = index + 1;
+  assignCompetitionRanks(
+    sorted,
+    overallRankScore,
+    (metric, rank) => {
+      metric.overallRank = rank;
+    }
+  );
+}
+
+function assignCompetitionRanks<T>(
+  sortedItems: T[],
+  rankKey: (item: T) => string | number,
+  setRank: (item: T, rank: number) => void
+): void {
+  let previousKey: string | number | null = null;
+  let currentRank = 0;
+
+  sortedItems.forEach((item, index) => {
+    const key = rankKey(item);
+
+    if (previousKey === null || key !== previousKey) {
+      currentRank = index + 1;
+    }
+
+    previousKey = key;
+    setRank(item, currentRank);
   });
+}
+
+function peakTierRankKey(metric: PersonMetricAccumulator, rankThresholds: number[]): string {
+  return rankThresholds
+    .map((threshold) => countEntriesAtOrAboveRank(metric.effectiveEntries, threshold))
+    .join("|");
+}
+
+function numericRankKey(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(10) : String(value);
+}
+
+function overallRankScore(metric: PersonMetricAccumulator): number {
+  return (
+    (metric.peakTierRank ?? Number.POSITIVE_INFINITY) +
+    (metric.weightedRank ?? Number.POSITIVE_INFINITY)
+  );
 }
 
 function countEntriesAtOrAboveRank(entries: LeaderboardEntry[], threshold: number): number {

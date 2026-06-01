@@ -31,8 +31,19 @@ export function rankDraftItems(items: RankingDraftItem[]): RankedDraftItem[] {
     return left.person.name.localeCompare(right.person.name, "zh-CN");
   });
 
+  let previousScoreKey: string | null = null;
+  let currentRank = 0;
+
   return sorted.map((item, index) => {
-    const rank = index + 1;
+    const scoreKey = numericRankKey(item.score);
+
+    if (previousScoreKey === null || scoreKey !== previousScoreKey) {
+      currentRank = index + 1;
+    }
+
+    previousScoreKey = scoreKey;
+
+    const rank = currentRank;
     const previousRank = item.previousEntry?.rank ?? null;
     const rankDelta = previousRank === null ? null : previousRank - rank;
 
@@ -45,6 +56,10 @@ export function rankDraftItems(items: RankingDraftItem[]): RankedDraftItem[] {
       movement: resolveMovement(previousRank, rankDelta, item.appearedBefore)
     };
   });
+}
+
+function numericRankKey(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(10) : String(value);
 }
 
 function resolveMovement(

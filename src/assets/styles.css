@@ -273,6 +273,11 @@ textarea {
   opacity: 0.55;
 }
 
+.icon-button {
+  width: 40px;
+  padding: 0;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -371,13 +376,48 @@ textarea {
   padding-block: 5px;
 }
 
+.leaderboard-list-row {
+  grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
+}
+
+.leaderboard-list-date {
+  color: #182327;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.leaderboard-list-title {
+  min-width: 0;
+  overflow: hidden;
+  justify-self: end;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row[href],
+.table-row[href],
+.person-table-row[href] {
+  cursor: pointer;
+}
+
+.list-row[href]:hover,
+.table-row[href]:hover,
+.person-table-row[href]:hover {
+  background: #f4f8f6;
+}
+
+.table-row[href]:hover .table-link {
+  text-decoration: underline;
+}
+
 .people-table {
   display: grid;
 }
 
 .person-table-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.35fr) 96px 120px minmax(140px, 1fr);
+  grid-template-columns: minmax(190px, 1.4fr) 78px 104px 78px 80px 82px minmax(120px, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 36px;
@@ -519,6 +559,15 @@ textarea {
   padding-block: 5px;
 }
 
+.tag-edit-row {
+  grid-template-columns: auto minmax(0, 1fr) 64px 72px auto auto;
+}
+
+.tag-sort-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
 .form-grid {
   display: grid;
   gap: 14px;
@@ -527,6 +576,31 @@ textarea {
 .form-grid label {
   display: grid;
   gap: 6px;
+}
+
+.add-person-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.add-person-tags {
+  display: grid;
+  gap: 8px;
+}
+
+.compact-title {
+  margin-bottom: 0;
+}
+
+.compact-title h2 {
+  font-size: 0.92rem;
+}
+
+.scrollable-tag-picker {
+  max-height: 132px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .leaderboard-form-grid {
@@ -940,7 +1014,7 @@ textarea {
     grid-template-columns: minmax(0, 1fr) 76px 96px;
   }
 
-  .person-table-row span:nth-child(4) {
+  .person-table-row span:nth-child(7) {
     grid-column: 1 / -1;
   }
 
@@ -961,6 +1035,10 @@ textarea {
 
   .editable-row {
     grid-template-columns: 1fr 54px;
+  }
+
+  .tag-sort-actions {
+    grid-column: 1 / -1;
   }
 
   .editable-row .list-meta,

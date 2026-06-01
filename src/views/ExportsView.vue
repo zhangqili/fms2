@@ -9,7 +9,7 @@ import {
   overallExportFilename
 } from "@/repositories/excelExportRepository";
 import {
-  leaderboardDisplayTitle,
+  leaderboardDisplayOptionalTitle,
   listLeaderboards,
   listPersonOverallMetrics,
   type PersonOverallMetric
@@ -175,7 +175,7 @@ onMounted(() => {
                   :key="leaderboard.id"
                   :value="leaderboard.id"
                 >
-                  {{ leaderboardDigitalDate(leaderboard) }} {{ leaderboardDisplayTitle(leaderboard) }}
+                  {{ leaderboardDigitalDate(leaderboard) }} {{ leaderboardDisplayOptionalTitle(leaderboard) }}
                 </option>
               </select>
             </label>
@@ -187,7 +187,7 @@ onMounted(() => {
                   :key="leaderboard.id"
                   :value="leaderboard.id"
                 >
-                  {{ leaderboardDigitalDate(leaderboard) }} {{ leaderboardDisplayTitle(leaderboard) }}
+                  {{ leaderboardDigitalDate(leaderboard) }} {{ leaderboardDisplayOptionalTitle(leaderboard) }}
                 </option>
               </select>
             </label>
@@ -204,7 +204,7 @@ onMounted(() => {
               <input v-model="selectedLeaderboardIds" type="checkbox" :value="leaderboard.id" />
               <span>
                 <span class="list-title">{{ leaderboardDigitalDate(leaderboard) }}</span>
-                <span class="list-meta">{{ leaderboardDisplayTitle(leaderboard) }}</span>
+                <span class="list-meta">{{ leaderboardDisplayOptionalTitle(leaderboard) }}</span>
               </span>
             </label>
           </div>
