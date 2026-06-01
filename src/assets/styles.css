@@ -124,14 +124,46 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 20;
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  align-items: center;
   max-width: 1120px;
   gap: 6px;
-  overflow-x: auto;
   margin-top: -12px;
   padding-block: 12px 8px;
   border-bottom: 1px solid #d8e3e0;
   background: #f7faf8;
+}
+
+.workspace-tabs-track {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.workspace-tabs-track::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-tabs-scroll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 36px;
+  border: 1px solid #cad8d6;
+  border-radius: 8px;
+  color: #3c4b50;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.workspace-tabs-scroll:hover {
+  border-color: var(--theme-color);
+  color: var(--theme-color);
 }
 
 .workspace-tab {

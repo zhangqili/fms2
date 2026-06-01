@@ -68,6 +68,11 @@ export async function listLeaderboards(): Promise<Leaderboard[]> {
   return leaderboards;
 }
 
+export async function listLeaderboardsByDateAsc(): Promise<Leaderboard[]> {
+  const leaderboards = await db.leaderboards.toArray();
+  return sortLeaderboardsByDateAsc(leaderboards);
+}
+
 export async function getLeaderboard(id: string): Promise<Leaderboard | undefined> {
   return db.leaderboards.get(id);
 }
@@ -616,6 +621,17 @@ function leaderboardDateKey(leaderboard: Leaderboard): number {
   const source = leaderboard.boardDate ?? leaderboard.createdAt.slice(0, 10);
   const text = source.slice(0, 10).replaceAll("-", "");
   return /^\d{8}$/.test(text) ? Number(text) : 0;
+}
+
+function sortLeaderboardsByDateAsc(leaderboards: Leaderboard[]): Leaderboard[] {
+  return [...leaderboards].sort((left, right) => {
+    const dateDelta = leaderboardDateKey(left) - leaderboardDateKey(right);
+    if (dateDelta !== 0) {
+      return dateDelta;
+    }
+
+    return left.createdAt.localeCompare(right.createdAt);
+  });
 }
 
 function isEffectiveScoredEntry(entry: LeaderboardEntry): boolean {

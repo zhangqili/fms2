@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
 import {
   getLeaderboard,
   leaderboardDisplayDate,
   leaderboardDisplayDateSource,
+  listLeaderboardsByDateAsc,
   listLeaderboardEntries,
   summarizeLeaderboardEntries
 } from "@/repositories/leaderboardsRepository";
@@ -19,9 +20,12 @@ const props = defineProps<{
   id: string;
 }>();
 
+const router = useRouter();
 const workspaceTabs = useWorkspaceTabsStore();
 const leaderboard = ref<Leaderboard | null>(null);
 const entries = ref<LeaderboardEntry[]>([]);
+const previousLeaderboard = ref<Leaderboard | null>(null);
+const nextLeaderboard = ref<Leaderboard | null>(null);
 let loadVersion = 0;
 
 const includedEntries = computed(() => entries.value.filter((entry) => entry.includedInRanking));
@@ -32,29 +36,49 @@ async function loadLeaderboardDetail(leaderboardId: string): Promise<void> {
   const currentVersion = ++loadVersion;
   leaderboard.value = null;
   entries.value = [];
+  previousLeaderboard.value = null;
+  nextLeaderboard.value = null;
 
-  const [nextLeaderboard, nextEntries] = await Promise.all([
+  const [loadedLeaderboard, nextEntries, allLeaderboards] = await Promise.all([
     getLeaderboard(leaderboardId),
-    listLeaderboardEntries(leaderboardId)
+    listLeaderboardEntries(leaderboardId),
+    listLeaderboardsByDateAsc()
   ]);
 
   if (currentVersion !== loadVersion) {
     return;
   }
 
-  leaderboard.value = nextLeaderboard ?? null;
+  leaderboard.value = loadedLeaderboard ?? null;
   entries.value = nextEntries;
-  if (nextLeaderboard) {
+  const currentIndex = allLeaderboards.findIndex((item) => item.id === leaderboardId);
+  previousLeaderboard.value = currentIndex > 0 ? allLeaderboards[currentIndex - 1] ?? null : null;
+  nextLeaderboard.value = currentIndex >= 0 ? allLeaderboards[currentIndex + 1] ?? null : null;
+
+  if (loadedLeaderboard) {
     workspaceTabs.updateTabTitle(
       "leaderboard",
-      nextLeaderboard.id,
-      leaderboardDisplayDate(nextLeaderboard)
+      loadedLeaderboard.id,
+      leaderboardDisplayDate(loadedLeaderboard)
     );
   }
 }
 
 function openPersonTab(entry: LeaderboardEntry): void {
   workspaceTabs.openPersonTab(entry.personId, entry.personNameSnapshot);
+}
+
+async function goToLeaderboard(target: Leaderboard | null): Promise<void> {
+  if (!target) {
+    return;
+  }
+
+  workspaceTabs.openLeaderboardTab(
+    target.id,
+    leaderboardDisplayDate(target),
+    `/leaderboards/${target.id}`
+  );
+  await router.push(`/leaderboards/${target.id}`);
 }
 
 watch(
@@ -71,7 +95,26 @@ watch(
     <PageHeader
       :title="leaderboard?.title || '未命名榜单'"
       description="详情页会展示名次、分数快照、上升下降、初次进榜、回榜和出榜。"
-    />
+    >
+      <div class="actions-row">
+        <button
+          class="button"
+          type="button"
+          :disabled="!previousLeaderboard"
+          @click="goToLeaderboard(previousLeaderboard)"
+        >
+          上一次
+        </button>
+        <button
+          class="button"
+          type="button"
+          :disabled="!nextLeaderboard"
+          @click="goToLeaderboard(nextLeaderboard)"
+        >
+          下一次
+        </button>
+      </div>
+    </PageHeader>
 
     <div class="detail-layout">
       <main class="detail-main">
