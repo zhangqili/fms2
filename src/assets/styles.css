@@ -360,8 +360,23 @@ textarea {
   padding-block: 5px;
 }
 
+.people-table {
+  display: grid;
+}
+
+.person-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.35fr) 96px 120px minmax(140px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding-block: 4px;
+  border-top: 1px solid #edf2f0;
+}
+
 .list-row:first-child,
-.table-row:first-child {
+.table-row:first-child,
+.person-table-row:first-child {
   border-top: 0;
 }
 
@@ -525,6 +540,71 @@ textarea {
   margin: 0;
 }
 
+.export-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.2fr) minmax(220px, 0.8fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.range-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.range-picker label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: #657276;
+  font-size: 0.82rem;
+}
+
+.range-picker .field {
+  width: 100%;
+}
+
+.selection-list {
+  display: grid;
+  max-height: calc(100vh - 230px);
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.selection-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding-block: 4px;
+  border-top: 1px solid #edf2f0;
+  cursor: pointer;
+}
+
+.selection-row:first-child {
+  border-top: 0;
+}
+
+.selection-row > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.selection-row .list-title,
+.selection-row .list-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .backup-area {
   width: 100%;
   min-height: 220px;
@@ -594,7 +674,7 @@ textarea {
   }
 
   .nav-list {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .nav-link {
@@ -629,6 +709,18 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .export-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .selection-list {
+    max-height: none;
+  }
+
+  .range-picker {
+    grid-template-columns: 1fr;
+  }
+
   .detail-layout {
     grid-template-columns: 1fr;
     overflow: visible;
@@ -652,6 +744,14 @@ textarea {
   .history-table .table-row,
   .out-table .table-row {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .person-table-row {
+    grid-template-columns: minmax(0, 1fr) 76px 96px;
+  }
+
+  .person-table-row span:nth-child(4) {
+    grid-column: 1 / -1;
   }
 
   .history-table .table-row span:nth-child(1),

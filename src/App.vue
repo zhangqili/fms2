@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Award, Home, Settings, Tags, Users } from "lucide-vue-next";
+import { Award, Download, Home, Settings, Tags, Users } from "lucide-vue-next";
 import { watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
@@ -16,6 +16,7 @@ const navItems = [
   { to: "/people", label: "人员", icon: Users },
   { to: "/tags", label: "标签", icon: Tags },
   { to: "/leaderboards", label: "榜单", icon: Award },
+  { to: "/exports", label: "导出", icon: Download },
   { to: "/settings", label: "设置", icon: Settings }
 ];
 

@@ -4,6 +4,11 @@ import { onMounted, ref } from "vue";
 import PageHeader from "@/components/PageHeader.vue";
 import { createJsonBackup } from "@/repositories/backupRepository";
 import {
+  downloadWorkbook,
+  exportLegacyWorkbook,
+  legacyExportFilename
+} from "@/repositories/excelExportRepository";
+import {
   importLegacyFmsWorkbook,
   previewLegacyFmsWorkbook,
   type LegacyFmsImportResult,
@@ -18,6 +23,8 @@ const legacyPreview = ref<LegacyFmsPreview | null>(null);
 const legacyImportResult = ref<LegacyFmsImportResult | null>(null);
 const legacyImporting = ref(false);
 const legacyImportError = ref("");
+const legacyExporting = ref(false);
+const legacyExportError = ref("");
 
 async function exportBackup(): Promise<void> {
   backupText.value = await createJsonBackup();
@@ -63,6 +70,19 @@ async function importLegacyFile(): Promise<void> {
   }
 }
 
+async function exportLegacyFile(): Promise<void> {
+  legacyExporting.value = true;
+  legacyExportError.value = "";
+  try {
+    const workbook = await exportLegacyWorkbook();
+    await downloadWorkbook(workbook, legacyExportFilename());
+  } catch (error) {
+    legacyExportError.value = error instanceof Error ? error.message : "导出失败。";
+  } finally {
+    legacyExporting.value = false;
+  }
+}
+
 onMounted(() => {
   void settingsStore.loadSettings();
 });
@@ -70,7 +90,7 @@ onMounted(() => {
 
 <template>
   <section class="page">
-    <PageHeader title="设置" description="本地数据、备份和旧 FMS xlsx 导入入口。" />
+    <PageHeader title="设置" description="本地数据、备份和旧 FMS xlsx 导入导出入口。" />
 
     <section class="panel">
       <div class="section-title">
@@ -133,6 +153,19 @@ onMounted(() => {
       >
         {{ legacyImporting ? "导入中" : "覆盖导入旧 FMS 数据" }}
       </button>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>旧 FMS xlsx 导出</h2>
+        <button class="button" type="button" :disabled="legacyExporting" @click="exportLegacyFile">
+          {{ legacyExporting ? "导出中" : "导出旧 FMS 格式" }}
+        </button>
+      </div>
+      <p class="empty">
+        按旧版三列块格式导出全部榜单，可用于旧 FMS 或当前旧 FMS 导入流程识别。
+      </p>
+      <p v-if="legacyExportError" class="error-list">{{ legacyExportError }}</p>
     </section>
   </section>
 </template>

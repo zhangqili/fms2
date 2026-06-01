@@ -243,6 +243,8 @@ watch(
             <dd>{{ stats?.appearanceCount ?? 0 }}</dd>
             <dt>总分</dt>
             <dd>{{ formatScore(stats?.totalScore ?? 0) }}</dd>
+            <dt>加权点数</dt>
+            <dd>{{ formatScore(stats?.weightedScore ?? 0) }}</dd>
             <dt>首次上榜日期</dt>
             <dd>{{ displayDate(stats?.firstAppearanceDate ?? null) }}</dd>
             <dt>最高排名</dt>
@@ -251,6 +253,12 @@ watch(
             <dd>{{ formatScore(stats?.peakRankScore ?? null) }}</dd>
             <dt>最高分</dt>
             <dd>{{ formatScore(stats?.highestScore ?? null) }}</dd>
+            <dt>加权排名</dt>
+            <dd>{{ stats?.weightedRank ?? "-" }}</dd>
+            <dt>峰值排名</dt>
+            <dd>{{ stats?.peakTierRank ?? "-" }}</dd>
+            <dt>总榜排名</dt>
+            <dd>{{ stats?.overallRank ?? "-" }}</dd>
           </dl>
         </section>
       </aside>

@@ -3,8 +3,13 @@ import { computed, onMounted, ref } from "vue";
 
 import PageHeader from "@/components/PageHeader.vue";
 import PersonListItem from "@/components/PersonListItem.vue";
+import {
+  listPersonOverallMetrics,
+  type PersonOverallMetric
+} from "@/repositories/leaderboardsRepository";
 import { usePeopleStore } from "@/stores/peopleStore";
 import { useTagsStore } from "@/stores/tagsStore";
+import type { Person } from "@/types/models";
 
 const peopleStore = usePeopleStore();
 const tagsStore = useTagsStore();
@@ -12,10 +17,14 @@ const newName = ref("");
 const newNote = ref("");
 const query = ref("");
 const newPersonTagIds = ref<string[]>([]);
+const overallMetrics = ref<PersonOverallMetric[]>([]);
 
 const tagsById = computed(() => new Map(tagsStore.tags.map((tag) => [tag.id, tag])));
+const overallMetricByPersonId = computed(
+  () => new Map(overallMetrics.value.map((metric) => [metric.personId, metric]))
+);
 
-const filteredPeople = computed(() => peopleStore.people);
+const filteredPeople = computed(() => [...peopleStore.people].sort(sortPeopleByOverallRank));
 
 async function addPerson(): Promise<void> {
   const name = newName.value.trim();
@@ -28,6 +37,7 @@ async function addPerson(): Promise<void> {
     note: newNote.value,
     tagIds: newPersonTagIds.value
   });
+  await loadOverallMetrics();
   newName.value = "";
   newNote.value = "";
   newPersonTagIds.value = [];
@@ -41,12 +51,16 @@ function toggleNewPersonTag(tagId: string): void {
 
 async function refreshPeople(): Promise<void> {
   peopleStore.setQuery(query.value);
-  await peopleStore.loadPeople();
+  await Promise.all([peopleStore.loadPeople(), loadOverallMetrics()]);
 }
 
 async function toggleFilterTag(tagId: string): Promise<void> {
   peopleStore.toggleSelectedTag(tagId);
-  await peopleStore.loadPeople();
+  await Promise.all([peopleStore.loadPeople(), loadOverallMetrics()]);
+}
+
+async function loadOverallMetrics(): Promise<void> {
+  overallMetrics.value = await listPersonOverallMetrics();
 }
 
 function tagNamesForPerson(personId: string): string[] {
@@ -56,8 +70,31 @@ function tagNamesForPerson(personId: string): string[] {
     .filter((name): name is string => typeof name === "string");
 }
 
+function metricForPerson(personId: string): PersonOverallMetric | undefined {
+  return overallMetricByPersonId.value.get(personId);
+}
+
+function sortPeopleByOverallRank(left: Person, right: Person): number {
+  const leftMetric = overallMetricByPersonId.value.get(left.id);
+  const rightMetric = overallMetricByPersonId.value.get(right.id);
+  const leftOverallRank = leftMetric?.overallRank ?? Number.POSITIVE_INFINITY;
+  const rightOverallRank = rightMetric?.overallRank ?? Number.POSITIVE_INFINITY;
+
+  if (leftOverallRank !== rightOverallRank) {
+    return leftOverallRank - rightOverallRank;
+  }
+
+  const leftWeightedRank = leftMetric?.weightedRank ?? Number.POSITIVE_INFINITY;
+  const rightWeightedRank = rightMetric?.weightedRank ?? Number.POSITIVE_INFINITY;
+  if (leftWeightedRank !== rightWeightedRank) {
+    return leftWeightedRank - rightWeightedRank;
+  }
+
+  return left.name.localeCompare(right.name, "zh-CN");
+}
+
 onMounted(async () => {
-  await Promise.all([tagsStore.loadTags(), peopleStore.loadPeople()]);
+  await Promise.all([tagsStore.loadTags(), peopleStore.loadPeople(), loadOverallMetrics()]);
 });
 </script>
 
@@ -71,7 +108,7 @@ onMounted(async () => {
         <input
           v-model="peopleStore.includeArchived"
           type="checkbox"
-          @change="peopleStore.loadPeople()"
+          @change="refreshPeople"
         />
         显示归档
       </label>
@@ -114,12 +151,21 @@ onMounted(async () => {
 
     <section class="panel">
       <p v-if="filteredPeople.length === 0" class="empty">还没有人员。</p>
-      <PersonListItem
-        v-for="person in filteredPeople"
-        :key="person.id"
-        :person="person"
-        :tag-names="tagNamesForPerson(person.id)"
-      />
+      <div v-else class="people-table">
+        <div class="person-table-row table-head">
+          <span>姓名</span>
+          <span>总点数</span>
+          <span>加权点数</span>
+          <span>备注</span>
+        </div>
+        <PersonListItem
+          v-for="person in filteredPeople"
+          :key="person.id"
+          :person="person"
+          :metric="metricForPerson(person.id)"
+          :tag-names="tagNamesForPerson(person.id)"
+        />
+      </div>
     </section>
   </section>
 </template>

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 
 import CreateLeaderboardView from "@/views/CreateLeaderboardView.vue";
+import ExportsView from "@/views/ExportsView.vue";
 import HomeView from "@/views/HomeView.vue";
 import LeaderboardDetailView from "@/views/LeaderboardDetailView.vue";
 import LeaderboardsView from "@/views/LeaderboardsView.vue";
@@ -22,6 +23,7 @@ const routes: RouteRecordRaw[] = [
     component: LeaderboardDetailView,
     props: true
   },
+  { path: "/exports", name: "exports", component: ExportsView },
   { path: "/settings", name: "settings", component: SettingsView }
 ];
 
