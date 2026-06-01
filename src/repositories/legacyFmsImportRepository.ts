@@ -1,7 +1,17 @@
 import { db } from "@/db";
-import type { Leaderboard, LeaderboardEntry, Movement, Person } from "@/types/models";
+import type {
+  Leaderboard,
+  LeaderboardEntry,
+  Movement,
+  Person,
+  PersonTag,
+  Tag
+} from "@/types/models";
 import { digitalDateToIsoDate, nowIso } from "@/utils/dates";
 import { makeId } from "@/utils/ids";
+import type { WorkBook, WorkSheet } from "xlsx";
+
+type XlsxUtils = typeof import("xlsx")["utils"];
 
 interface ParsedLegacyEntry {
   name: string;
@@ -17,9 +27,18 @@ interface ParsedLegacyLeaderboard {
   zeroScoreEntries: ParsedLegacyEntry[];
 }
 
+interface ParsedLegacyTag {
+  sourceKey: string;
+  name: string;
+  color: string;
+  sortOrder: number;
+  personNames: string[];
+}
+
 interface ParsedLegacyWorkbook {
   people: string[];
   leaderboards: ParsedLegacyLeaderboard[];
+  tags: ParsedLegacyTag[];
   errors: string[];
 }
 
@@ -28,6 +47,8 @@ export interface LegacyFmsPreview {
   leaderboardCount: number;
   entryCount: number;
   zeroScoreEntryCount: number;
+  tagCount: number;
+  personTagCount: number;
   errors: string[];
   dates: Array<{
     digitalDate: number;
@@ -43,6 +64,8 @@ export interface LegacyFmsImportResult {
   leaderboardCount: number;
   entryCount: number;
   outEntryCount: number;
+  tagCount: number;
+  personTagCount: number;
 }
 
 export async function previewLegacyFmsWorkbook(file: File): Promise<LegacyFmsPreview> {
@@ -56,6 +79,8 @@ export async function previewLegacyFmsWorkbook(file: File): Promise<LegacyFmsPre
       (sum, item) => sum + item.zeroScoreEntries.length,
       0
     ),
+    tagCount: parsed.tags.length,
+    personTagCount: parsed.tags.reduce((sum, tag) => sum + tag.personNames.length, 0),
     errors: parsed.errors,
     dates: parsed.leaderboards.map((item) => ({
       digitalDate: item.digitalDate,
@@ -83,6 +108,23 @@ export async function importLegacyFmsWorkbook(file: File): Promise<LegacyFmsImpo
     updatedAt: timestamp
   }));
   const personByName = new Map(people.map((person) => [person.name, person]));
+  const tags = parsed.tags.map<Tag>((tag, index) => ({
+    id: makeId("tag"),
+    name: tag.name,
+    color: tag.color,
+    sortOrder: Number.isFinite(tag.sortOrder) ? tag.sortOrder : (index + 1) * 1000,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }));
+  const tagBySourceKey = new Map<string, Tag>();
+  parsed.tags.forEach((tag, index) => {
+    const importedTag = tags[index];
+    if (importedTag) {
+      tagBySourceKey.set(tag.sourceKey, importedTag);
+    }
+  });
+  const personTags = buildImportedPersonTags(parsed.tags, tagBySourceKey, personByName, timestamp);
+  const tagNamesByPersonName = buildTagNamesByPersonName(parsed.tags);
   const leaderboards: Leaderboard[] = [];
   const entries: LeaderboardEntry[] = [];
 
@@ -136,7 +178,7 @@ export async function importLegacyFmsWorkbook(file: File): Promise<LegacyFmsImpo
         leaderboardId: leaderboard.id,
         personId: person.id,
         personNameSnapshot: person.name,
-        tagSnapshots: [],
+        tagSnapshots: tagNamesByPersonName.get(person.name) ?? [],
         rank: legacyEntry.sourceRank,
         previousRank,
         rankDelta,
@@ -164,7 +206,7 @@ export async function importLegacyFmsWorkbook(file: File): Promise<LegacyFmsImpo
         leaderboardId: leaderboard.id,
         personId: previousEntry.personId,
         personNameSnapshot: person?.name ?? previousEntry.personNameSnapshot,
-        tagSnapshots: [],
+        tagSnapshots: person ? tagNamesByPersonName.get(person.name) ?? [] : previousEntry.tagSnapshots,
         rank: null,
         previousRank: previousEntry.rank,
         rankDelta: null,
@@ -201,6 +243,12 @@ export async function importLegacyFmsWorkbook(file: File): Promise<LegacyFmsImpo
       if (people.length > 0) {
         await db.people.bulkAdd(people);
       }
+      if (tags.length > 0) {
+        await db.tags.bulkAdd(tags);
+      }
+      if (personTags.length > 0) {
+        await db.person_tags.bulkAdd(personTags);
+      }
       if (leaderboards.length > 0) {
         await db.leaderboards.bulkAdd(leaderboards);
       }
@@ -214,14 +262,16 @@ export async function importLegacyFmsWorkbook(file: File): Promise<LegacyFmsImpo
     peopleCount: people.length,
     leaderboardCount: leaderboards.length,
     entryCount: entries.filter((entry) => entry.includedInRanking).length,
-    outEntryCount: entries.filter((entry) => entry.movement === "out").length
+    outEntryCount: entries.filter((entry) => entry.movement === "out").length,
+    tagCount: tags.length,
+    personTagCount: personTags.length
   };
 }
 
 async function parseLegacyFmsWorkbook(file: File): Promise<ParsedLegacyWorkbook> {
   const { read, utils } = await import("xlsx");
   const buffer = await file.arrayBuffer();
-  const workbook = read(buffer);
+  const workbook = read(buffer, { cellStyles: true });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const range = utils.decode_range(sheet["!ref"] ?? "A1:A1");
@@ -294,12 +344,163 @@ async function parseLegacyFmsWorkbook(file: File): Promise<ParsedLegacyWorkbook>
   }
 
   leaderboards.sort((left, right) => left.digitalDate - right.digitalDate);
+  const tags = parseLegacyTagSheet(workbook, utils, people);
 
   return {
     people: [...people].sort((left, right) => left.localeCompare(right, "zh-CN")),
     leaderboards,
+    tags,
     errors
   };
+}
+
+function parseLegacyTagSheet(
+  workbook: WorkBook,
+  utils: XlsxUtils,
+  people: Set<string>
+): ParsedLegacyTag[] {
+  const sheetName = workbook.SheetNames[1];
+  const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+  if (!sheet?.["!ref"]) {
+    return [];
+  }
+
+  const range = utils.decode_range(sheet["!ref"]);
+  const parsedTags: ParsedLegacyTag[] = [];
+
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    const tagName = cellText(sheet, utils, row, 1);
+    if (!tagName) {
+      continue;
+    }
+
+    const color = normalizeTagColor(
+      cellText(sheet, utils, row, 0) || cellFillColor(sheet, utils, row, 0)
+    );
+    const personNames: string[] = [];
+
+    for (let column = 2; column <= range.e.c; column += 1) {
+      for (const personName of splitPersonNames(cellText(sheet, utils, row, column))) {
+        people.add(personName);
+        if (!personNames.includes(personName)) {
+          personNames.push(personName);
+        }
+      }
+    }
+
+    parsedTags.push({
+      sourceKey: `${tagName}\u0000${row}`,
+      name: tagName,
+      color,
+      sortOrder: (parsedTags.length + 1) * 1000,
+      personNames
+    });
+  }
+
+  return parsedTags;
+}
+
+function buildImportedPersonTags(
+  parsedTags: ParsedLegacyTag[],
+  tagBySourceKey: Map<string, Tag>,
+  personByName: Map<string, Person>,
+  timestamp: string
+): PersonTag[] {
+  const personTags: PersonTag[] = [];
+  const relationKeys = new Set<string>();
+
+  for (const parsedTag of parsedTags) {
+    const tag = tagBySourceKey.get(parsedTag.sourceKey);
+    if (!tag) {
+      continue;
+    }
+
+    for (const personName of parsedTag.personNames) {
+      const person = personByName.get(personName);
+      if (!person) {
+        continue;
+      }
+
+      const relationKey = `${person.id}:${tag.id}`;
+      if (relationKeys.has(relationKey)) {
+        continue;
+      }
+
+      relationKeys.add(relationKey);
+      personTags.push({
+        id: makeId("person_tag"),
+        personId: person.id,
+        tagId: tag.id,
+        createdAt: timestamp
+      });
+    }
+  }
+
+  return personTags;
+}
+
+function buildTagNamesByPersonName(parsedTags: ParsedLegacyTag[]): Map<string, string[]> {
+  const tagNamesByPersonName = new Map<string, string[]>();
+
+  for (const parsedTag of parsedTags) {
+    for (const personName of parsedTag.personNames) {
+      const tagNames = tagNamesByPersonName.get(personName) ?? [];
+      if (!tagNames.includes(parsedTag.name)) {
+        tagNames.push(parsedTag.name);
+      }
+      tagNamesByPersonName.set(personName, tagNames);
+    }
+  }
+
+  return tagNamesByPersonName;
+}
+
+function cellText(sheet: WorkSheet, utils: XlsxUtils, row: number, column: number): string {
+  const value = cellValue(sheet, utils, row, column);
+  return value === undefined || value === null ? "" : String(value).trim();
+}
+
+function cellValue(sheet: WorkSheet, utils: XlsxUtils, row: number, column: number): unknown {
+  if (column < 0) {
+    return undefined;
+  }
+
+  return sheet[utils.encode_cell({ r: row, c: column })]?.v;
+}
+
+function cellFillColor(sheet: WorkSheet, utils: XlsxUtils, row: number, column: number): string {
+  const cell = sheet[utils.encode_cell({ r: row, c: column })] as {
+    s?: {
+      fgColor?: { rgb?: string };
+      fill?: { fgColor?: { rgb?: string } };
+    };
+  } | undefined;
+  const rawColor = cell?.s?.fill?.fgColor?.rgb ?? cell?.s?.fgColor?.rgb ?? "";
+  return normalizeTagColor(rawColor);
+}
+
+function splitPersonNames(value: string): string[] {
+  return value
+    .split(/[\n,，;；]+/)
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function normalizeTagColor(value: string): string {
+  const text = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(text)) {
+    return text;
+  }
+
+  if (/^[0-9a-fA-F]{6}$/.test(text)) {
+    return `#${text}`;
+  }
+
+  if (/^[0-9a-fA-F]{8}$/.test(text)) {
+    return `#${text.slice(2)}`;
+  }
+
+  return "#5b2a86";
 }
 
 function rankParsedLegacyEntries(entries: ParsedLegacyEntry[]): ParsedLegacyEntry[] {

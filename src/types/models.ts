@@ -60,6 +60,7 @@ export interface AppSettings {
   id: "app";
   scoreMin: number;
   defaultSort: "name" | "createdAt" | "updatedAt";
+  themeColor: string;
   schemaVersion: number;
   updatedAt: string;
 }

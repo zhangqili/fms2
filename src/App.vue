@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { Award, Download, Home, Settings, Tags, Users } from "lucide-vue-next";
-import { watch } from "vue";
+import { onMounted, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
 import PwaStatus from "@/components/PwaStatus.vue";
 import WorkspaceTabs from "@/components/WorkspaceTabs.vue";
 import {
   getLeaderboard,
-  leaderboardDisplayTitle
+  leaderboardDisplayDate
 } from "@/repositories/leaderboardsRepository";
 import { getPerson } from "@/repositories/peopleRepository";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
 
 const navItems = [
@@ -23,7 +24,12 @@ const navItems = [
 
 const route = useRoute();
 const workspaceTabs = useWorkspaceTabsStore();
+const settingsStore = useSettingsStore();
 let syncVersion = 0;
+
+onMounted(() => {
+  void settingsStore.loadSettings();
+});
 
 watch(
   () => route.fullPath,
@@ -50,7 +56,7 @@ async function syncWorkspaceTabFromRoute(): Promise<void> {
     workspaceTabs.openLeaderboardTab(entityId, undefined, route.fullPath);
     const leaderboard = await getLeaderboard(entityId);
     if (currentVersion === syncVersion && leaderboard) {
-      workspaceTabs.updateTabTitle("leaderboard", entityId, leaderboardDisplayTitle(leaderboard));
+      workspaceTabs.updateTabTitle("leaderboard", entityId, leaderboardDisplayDate(leaderboard));
     }
     return;
   }

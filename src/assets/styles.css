@@ -1,4 +1,9 @@
 :root {
+  --theme-color: #5b2a86;
+  --theme-accent: #d4af37;
+  --theme-soft: color-mix(in srgb, var(--theme-color) 12%, #ffffff);
+  --theme-softer: color-mix(in srgb, var(--theme-color) 7%, #ffffff);
+  --theme-border-soft: color-mix(in srgb, var(--theme-color) 22%, transparent);
   color: #182327;
   background: #f7faf8;
   font-family:
@@ -6,6 +11,12 @@
   font-size: 16px;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
 }
 
 * {
@@ -36,12 +47,17 @@ textarea {
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
+  align-self: start;
   gap: 28px;
+  height: 100vh;
+  overflow-y: auto;
   padding: 24px 18px;
   color: #f7faf8;
-  background: #245c73;
+  background: var(--theme-color);
 }
 
 .brand {
@@ -56,8 +72,8 @@ textarea {
   height: 44px;
   place-items: center;
   border-radius: 8px;
-  color: #245c73;
-  background: #f5b84b;
+  color: var(--theme-color);
+  background: var(--theme-accent);
   font-weight: 800;
 }
 
@@ -105,12 +121,17 @@ textarea {
 }
 
 .workspace-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   max-width: 1120px;
   gap: 6px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  margin-top: -12px;
+  padding-block: 12px 8px;
   border-bottom: 1px solid #d8e3e0;
+  background: #f7faf8;
 }
 
 .workspace-tab {
@@ -126,9 +147,9 @@ textarea {
 }
 
 .workspace-tab.active {
-  border-color: #245c73;
+  border-color: var(--theme-color);
   color: #183138;
-  background: #e8f2ef;
+  background: var(--theme-soft);
 }
 
 .workspace-tab-main,
@@ -159,7 +180,7 @@ textarea {
 .workspace-tab-close {
   width: 32px;
   justify-content: center;
-  border-left: 1px solid rgba(36, 92, 115, 0.16);
+  border-left: 1px solid var(--theme-border-soft);
 }
 
 .workspace-tab-close:hover {
@@ -257,9 +278,9 @@ textarea {
 }
 
 .button.primary {
-  border-color: #245c73;
+  border-color: var(--theme-color);
   color: #ffffff;
-  background: #245c73;
+  background: var(--theme-color);
 }
 
 .button.danger {
@@ -460,8 +481,8 @@ textarea {
 }
 
 .mini-tag {
-  color: #245c73;
-  background: #e8f2ef;
+  color: var(--theme-color);
+  background: var(--theme-soft);
 }
 
 .status-pill {
@@ -491,7 +512,7 @@ textarea {
 }
 
 .tag-chip.selected {
-  border-color: #245c73;
+  border-color: var(--theme-color);
 }
 
 .tag-dot {
@@ -543,7 +564,7 @@ textarea {
 .table-link {
   min-width: 0;
   overflow: hidden;
-  color: #245c73;
+  color: var(--theme-color);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -560,7 +581,7 @@ textarea {
 }
 
 .tag-edit-row {
-  grid-template-columns: auto minmax(0, 1fr) 64px 72px auto auto;
+  grid-template-columns: auto minmax(0, 1fr) 64px 72px auto;
 }
 
 .tag-sort-actions {
@@ -664,6 +685,13 @@ textarea {
 .field-label {
   display: inline-block;
   margin-bottom: 6px;
+}
+
+.theme-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #657276;
 }
 
 .check-row {
@@ -865,8 +893,8 @@ textarea {
 }
 
 .pwa-status[data-kind="refresh"] {
-  border-color: #245c73;
-  background: #e8f2ef;
+  border-color: var(--theme-color);
+  background: var(--theme-soft);
 }
 
 .pwa-status[data-kind="ready"] {
@@ -887,7 +915,7 @@ textarea {
   flex: 0 0 auto;
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(36, 92, 115, 0.16);
+  border: 1px solid var(--theme-border-soft);
   border-radius: 8px;
   color: inherit;
   background: rgba(255, 255, 255, 0.72);
@@ -895,7 +923,7 @@ textarea {
 }
 
 .pwa-action:hover {
-  border-color: #245c73;
+  border-color: var(--theme-color);
 }
 
 @media (max-width: 760px) {
@@ -906,7 +934,7 @@ textarea {
   .sidebar {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 30;
     gap: 12px;
     padding: 12px;
   }
@@ -934,6 +962,7 @@ textarea {
 
   .workspace-tabs {
     margin: 0 -2px;
+    top: 112px;
   }
 
   .workspace-tab {

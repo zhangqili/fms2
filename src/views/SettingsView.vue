@@ -14,10 +14,11 @@ import {
   type LegacyFmsImportResult,
   type LegacyFmsPreview
 } from "@/repositories/legacyFmsImportRepository";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { DEFAULT_THEME_COLOR, useSettingsStore } from "@/stores/settingsStore";
 
 const settingsStore = useSettingsStore();
 const backupText = ref("");
+const themeColor = ref(DEFAULT_THEME_COLOR);
 const legacyFile = ref<File | null>(null);
 const legacyPreview = ref<LegacyFmsPreview | null>(null);
 const legacyImportResult = ref<LegacyFmsImportResult | null>(null);
@@ -28,6 +29,16 @@ const legacyExportError = ref("");
 
 async function exportBackup(): Promise<void> {
   backupText.value = await createJsonBackup();
+}
+
+async function saveThemeColor(): Promise<void> {
+  await settingsStore.updateThemeColor(themeColor.value);
+  themeColor.value = settingsStore.settings.themeColor;
+}
+
+async function resetThemeColor(): Promise<void> {
+  themeColor.value = DEFAULT_THEME_COLOR;
+  await saveThemeColor();
 }
 
 async function previewLegacyFile(event: Event): Promise<void> {
@@ -83,8 +94,9 @@ async function exportLegacyFile(): Promise<void> {
   }
 }
 
-onMounted(() => {
-  void settingsStore.loadSettings();
+onMounted(async () => {
+  await settingsStore.loadSettings();
+  themeColor.value = settingsStore.settings.themeColor;
 });
 </script>
 
@@ -97,6 +109,20 @@ onMounted(() => {
         <h2>分数规则</h2>
       </div>
       <p>默认下限：{{ settingsStore.settings.scoreMin }}；不设置上限。</p>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>主题</h2>
+      </div>
+      <div class="toolbar">
+        <label class="theme-field">
+          <span>主题色</span>
+          <input v-model="themeColor" class="field color-field" type="color" aria-label="主题色" />
+        </label>
+        <button class="button primary" type="button" @click="saveThemeColor">保存主题色</button>
+        <button class="button" type="button" @click="resetThemeColor">恢复紫金色</button>
+      </div>
     </section>
 
     <section class="panel">
@@ -117,6 +143,8 @@ onMounted(() => {
         <span>榜单 {{ legacyPreview.leaderboardCount }}</span>
         <span>条目 {{ legacyPreview.entryCount }}</span>
         <span>零分/出榜候选 {{ legacyPreview.zeroScoreEntryCount }}</span>
+        <span>标签 {{ legacyPreview.tagCount }}</span>
+        <span>标签绑定 {{ legacyPreview.personTagCount }}</span>
       </div>
       <div v-if="legacyPreview?.dates.length" class="table-panel import-table">
         <div class="table-row table-head">
@@ -143,7 +171,10 @@ onMounted(() => {
         已导入 {{ legacyImportResult.peopleCount }} 人、{{ legacyImportResult.leaderboardCount }} 期榜单、{{
           legacyImportResult.entryCount
         }}
-        条在榜记录、{{ legacyImportResult.outEntryCount }} 条出榜记录。
+        条在榜记录、{{ legacyImportResult.outEntryCount }} 条出榜记录、{{
+          legacyImportResult.tagCount
+        }}
+        个标签、{{ legacyImportResult.personTagCount }} 条标签绑定。
       </div>
       <button
         class="button danger"
@@ -163,7 +194,7 @@ onMounted(() => {
         </button>
       </div>
       <p class="empty">
-        按旧版三列块格式导出全部榜单，可用于旧 FMS 或当前旧 FMS 导入流程识别。
+        第一个 sheet 按旧版三列块格式导出全部榜单；第二个 sheet 每行一个标签，A 列为颜色块，B 列为标签名，C 列之后为人员姓名。
       </p>
       <p v-if="legacyExportError" class="error-list">{{ legacyExportError }}</p>
     </section>

@@ -4,7 +4,7 @@ import {
   leaderboardDisplayTitle,
   type PersonOverallMetric
 } from "@/repositories/leaderboardsRepository";
-import type { Leaderboard, LeaderboardEntry, Person } from "@/types/models";
+import type { Leaderboard, LeaderboardEntry, Person, PersonTag, Tag } from "@/types/models";
 import type { WorkBook } from "xlsx";
 
 type CellValue = string | number;
@@ -12,6 +12,10 @@ type XlsxModule = typeof import("xlsx") & {
   default?: {
     CFB?: XlsxCfb;
   };
+};
+
+type FmsWorkbook = WorkBook & {
+  __fms2LegacyTagColors?: string[];
 };
 
 interface XlsxCfb {
@@ -73,9 +77,12 @@ export async function exportOverallWorkbook(options: OverallWorkbookOptions): Pr
 
 export async function exportLegacyWorkbook(): Promise<WorkBook> {
   const { utils } = await import("xlsx");
-  const [leaderboards, entries] = await Promise.all([
+  const [leaderboards, entries, tags, people, personTags] = await Promise.all([
     db.leaderboards.toArray(),
-    db.leaderboard_entries.toArray()
+    db.leaderboard_entries.toArray(),
+    db.tags.toArray(),
+    db.people.toArray(),
+    db.person_tags.toArray()
   ]);
   const sortedLeaderboards = sortLeaderboardsForExport(leaderboards);
   const entriesByLeaderboardId = new Map<string, LeaderboardEntry[]>();
@@ -113,15 +120,39 @@ export async function exportLegacyWorkbook(): Promise<WorkBook> {
     rows[boardEntries.length + 1][column] = leaderboardDisplayTitle(leaderboard);
   }
 
-  const workbook = utils.book_new();
+  const workbook = utils.book_new() as FmsWorkbook;
+  const tagSheetData = buildLegacyTagRows(tags, people, personTags);
   utils.book_append_sheet(workbook, utils.aoa_to_sheet(rows.length > 0 ? rows : [[]]), "Sheet1");
+  const tagSheet = utils.aoa_to_sheet(tagSheetData.rows.length > 0 ? tagSheetData.rows : [[]]);
+  tagSheet["!cols"] = [
+    { wch: 4 },
+    { wch: 16 },
+    ...Array.from({ length: tagSheetData.maxPersonCount }, () => ({ wch: 12 }))
+  ];
+  tagSheetData.colors.forEach((color, index) => {
+    const colorCell = tagSheet[utils.encode_cell({ r: index, c: 0 })] as { s?: unknown } | undefined;
+    if (colorCell) {
+      colorCell.s = {
+        fill: {
+          fgColor: { rgb: normalizeWorkbookColor(color) },
+          patternType: "solid"
+        }
+      };
+    }
+  });
+  utils.book_append_sheet(workbook, tagSheet, "标签");
+  workbook.__fms2LegacyTagColors = tagSheetData.colors;
   return workbook;
 }
 
 export async function downloadWorkbook(workbook: WorkBook, filename: string): Promise<void> {
   const xlsxModule = await import("xlsx") as XlsxModule;
   const workbookData = xlsxModule.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
-  const frozenWorkbookData = freezeWorkbookFirstRowAndColumn(workbookData, xlsxModule);
+  const frozenWorkbookData = freezeWorkbookFirstRowAndColumn(
+    workbookData,
+    xlsxModule,
+    (workbook as FmsWorkbook).__fms2LegacyTagColors ?? []
+  );
   const blob = new Blob([copyToArrayBuffer(frozenWorkbookData)], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   });
@@ -229,6 +260,37 @@ function buildRankStatsRows(
   return rows;
 }
 
+function buildLegacyTagRows(
+  tags: Tag[],
+  people: Person[],
+  personTags: PersonTag[]
+): { rows: CellValue[][]; colors: string[]; maxPersonCount: number } {
+  const rows: CellValue[][] = [];
+  const colors: string[] = [];
+  const peopleById = new Map(people.map((person) => [person.id, person]));
+  const relationsByTagId = new Map<string, PersonTag[]>();
+  let maxPersonCount = 0;
+
+  for (const relation of personTags) {
+    const relations = relationsByTagId.get(relation.tagId) ?? [];
+    relations.push(relation);
+    relationsByTagId.set(relation.tagId, relations);
+  }
+
+  for (const tag of sortTagsForExport(tags)) {
+    const boundPeople = (relationsByTagId.get(tag.id) ?? [])
+      .map((relation) => peopleById.get(relation.personId))
+      .filter((person): person is Person => Boolean(person))
+      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+    const color = normalizeTagColor(tag.color);
+    rows.push([color, tag.name, ...boundPeople.map((person) => person.name)]);
+    colors.push(color);
+    maxPersonCount = Math.max(maxPersonCount, boundPeople.length);
+  }
+
+  return { rows, colors, maxPersonCount };
+}
+
 function buildEffectiveEntryMap(entries: LeaderboardEntry[]): Map<string, LeaderboardEntry> {
   const entryByKey = new Map<string, LeaderboardEntry>();
 
@@ -283,6 +345,17 @@ function sortLeaderboardsForExport(leaderboards: Leaderboard[]): Leaderboard[] {
   });
 }
 
+function sortTagsForExport(tags: Tag[]): Tag[] {
+  return [...tags].sort((left, right) => {
+    const sortOrderDelta = left.sortOrder - right.sortOrder;
+    if (sortOrderDelta !== 0) {
+      return sortOrderDelta;
+    }
+
+    return left.name.localeCompare(right.name, "zh-CN");
+  });
+}
+
 function isEffectiveScoredEntry(entry: LeaderboardEntry): boolean {
   return entry.includedInRanking && entry.rank !== null && (entry.scoreSnapshot ?? 0) > 0;
 }
@@ -291,7 +364,11 @@ function entryKey(leaderboardId: string, personId: string): string {
   return `${leaderboardId}:${personId}`;
 }
 
-function freezeWorkbookFirstRowAndColumn(data: ArrayBuffer, xlsxModule: XlsxModule): Uint8Array {
+function freezeWorkbookFirstRowAndColumn(
+  data: ArrayBuffer,
+  xlsxModule: XlsxModule,
+  legacyTagColors: string[] = []
+): Uint8Array {
   const CFB = (xlsxModule.default?.CFB ?? xlsxModule.CFB) as XlsxCfb | undefined;
   if (!CFB) {
     throw new Error("当前 xlsx 运行时不支持写入冻结窗格。");
@@ -300,6 +377,9 @@ function freezeWorkbookFirstRowAndColumn(data: ArrayBuffer, xlsxModule: XlsxModu
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   const container: XlsxCfbContainer = CFB.read(new Uint8Array(data), { type: "array" });
+  const legacyTagStyleIndexes = legacyTagColors.length > 0
+    ? applyLegacyTagFillStyles(container, decoder, encoder, legacyTagColors)
+    : [];
 
   container.FullPaths.forEach((path, index) => {
     if (!path.startsWith("Root Entry/xl/worksheets/") || !path.endsWith(".xml")) {
@@ -312,12 +392,79 @@ function freezeWorkbookFirstRowAndColumn(data: ArrayBuffer, xlsxModule: XlsxModu
     }
 
     const xml = decoder.decode(toUint8Array(file.content));
-    const nextXml = applyFrozenPaneXml(xml);
+    const frozenXml = applyFrozenPaneXml(xml);
+    const nextXml = path.endsWith("/sheet2.xml") && legacyTagStyleIndexes.length > 0
+      ? applyLegacyTagSheetFillXml(frozenXml, legacyTagStyleIndexes)
+      : frozenXml;
     file.content = encoder.encode(nextXml);
     file.size = file.content.length;
   });
 
   return toUint8Array(CFB.write(container, { fileType: "zip", type: "array" }));
+}
+
+function applyLegacyTagFillStyles(
+  container: XlsxCfbContainer,
+  decoder: TextDecoder,
+  encoder: TextEncoder,
+  colors: string[]
+): number[] {
+  const stylesIndex = container.FullPaths.findIndex((path) => path.endsWith("/xl/styles.xml"));
+  const stylesFile = stylesIndex >= 0 ? container.FileIndex[stylesIndex] : undefined;
+  if (!stylesFile?.content) {
+    return [];
+  }
+
+  const xml = decoder.decode(toUint8Array(stylesFile.content));
+  const fontCount = Number(xml.match(/<fonts count="(\d+)"/)?.[1] ?? 0);
+  const fillCount = Number(xml.match(/<fills count="(\d+)"/)?.[1] ?? 0);
+  const cellXfsCount = Number(xml.match(/<cellXfs count="(\d+)"/)?.[1] ?? 0);
+
+  if (!Number.isFinite(fontCount) || !Number.isFinite(fillCount) || !Number.isFinite(cellXfsCount)) {
+    return [];
+  }
+
+  const normalizedColors = colors.map(normalizeWorkbookColor);
+  const fonts = normalizedColors
+    .map((color) => `<font><sz val="12"/><color rgb="FF${color}"/><name val="Calibri"/></font>`)
+    .join("");
+  const fills = normalizedColors
+    .map((color) =>
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF${color}"/><bgColor indexed="64"/></patternFill></fill>`
+    )
+    .join("");
+  const xfs = normalizedColors
+    .map((_color, index) =>
+      `<xf numFmtId="0" fontId="${fontCount + index}" fillId="${fillCount + index}" borderId="0" xfId="0" applyFont="1" applyFill="1"/>`
+    )
+    .join("");
+
+  const nextXml = xml
+    .replace(/<fonts count="\d+"/, `<fonts count="${fontCount + normalizedColors.length}"`)
+    .replace("</fonts>", `${fonts}</fonts>`)
+    .replace(/<fills count="\d+"/, `<fills count="${fillCount + normalizedColors.length}"`)
+    .replace("</fills>", `${fills}</fills>`)
+    .replace(/<cellXfs count="\d+"/, `<cellXfs count="${cellXfsCount + normalizedColors.length}"`)
+    .replace("</cellXfs>", `${xfs}</cellXfs>`);
+
+  stylesFile.content = encoder.encode(nextXml);
+  stylesFile.size = stylesFile.content.length;
+
+  return normalizedColors.map((_color, index) => cellXfsCount + index);
+}
+
+function applyLegacyTagSheetFillXml(xml: string, styleIndexes: number[]): string {
+  return styleIndexes.reduce((nextXml, styleIndex, index) => {
+    const cellRef = `A${index + 1}`;
+    const escapedCellRef = cellRef.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const styledCellPattern = new RegExp(`(<c\\b(?=[^>]*\\br="${escapedCellRef}")[^>]*?)\\s+s="\\d+"([^>]*>)`);
+    const unstyledCellPattern = new RegExp(`(<c\\b(?=[^>]*\\br="${escapedCellRef}")[^>]*?)(>)`);
+    const styledXml = nextXml.replace(styledCellPattern, `$1 s="${styleIndex}"$2`);
+
+    return styledXml === nextXml
+      ? nextXml.replace(unstyledCellPattern, `$1 s="${styleIndex}"$2`)
+      : styledXml;
+  }, xml);
 }
 
 function applyFrozenPaneXml(xml: string): string {
@@ -347,6 +494,14 @@ function copyToArrayBuffer(data: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(data.byteLength);
   new Uint8Array(buffer).set(data);
   return buffer;
+}
+
+function normalizeTagColor(value: string): string {
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#5b2a86";
+}
+
+function normalizeWorkbookColor(value: string): string {
+  return normalizeTagColor(value).replace("#", "").toUpperCase();
 }
 
 function todayStamp(): string {

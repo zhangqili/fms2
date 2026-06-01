@@ -25,7 +25,7 @@ export async function listTagsWithUsage(): Promise<TagWithUsage[]> {
   return tags.map((tag) => ({ ...tag, usageCount: usageByTagId.get(tag.id) ?? 0 }));
 }
 
-export async function createTag(name: string, color = "#245c73"): Promise<Tag> {
+export async function createTag(name: string, color = "#5b2a86"): Promise<Tag> {
   const trimmedName = name.trim();
   if (!trimmedName) {
     throw new Error("Tag name is required.");

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { ArrowDown, ArrowUp } from "lucide-vue-next";
 
 import PageHeader from "@/components/PageHeader.vue";
@@ -8,8 +8,8 @@ import type { Tag } from "@/types/models";
 
 const tagsStore = useTagsStore();
 const newTagName = ref("");
-const newTagColor = ref("#245c73");
-const editingTags = reactive<Record<string, { name: string; color: string }>>({});
+const newTagColor = ref("#5b2a86");
+const pendingSaveTimers = new Map<string, number>();
 
 async function addTag(): Promise<void> {
   const name = newTagName.value.trim();
@@ -19,24 +19,45 @@ async function addTag(): Promise<void> {
 
   await tagsStore.addTag(name, newTagColor.value);
   newTagName.value = "";
-  newTagColor.value = "#245c73";
+  newTagColor.value = "#5b2a86";
 }
 
-function ensureEditState(tag: Tag): { name: string; color: string } {
-  editingTags[tag.id] ??= {
-    name: tag.name,
-    color: tag.color
-  };
-  return editingTags[tag.id];
+function queueTagSave(tagId: string): void {
+  clearPendingTagSave(tagId);
+  pendingSaveTimers.set(
+    tagId,
+    window.setTimeout(() => {
+      pendingSaveTimers.delete(tagId);
+      void saveTagNow(tagId);
+    }, 300)
+  );
 }
 
-async function saveTag(tag: Tag): Promise<void> {
-  const draft = ensureEditState(tag);
+async function flushTagSave(tagId: string): Promise<void> {
+  clearPendingTagSave(tagId);
+  await saveTagNow(tagId);
+}
+
+async function saveTagNow(tagId: string): Promise<void> {
+  const tag = tagsStore.tags.find((item) => item.id === tagId);
+  if (!tag || !tag.name.trim()) {
+    return;
+  }
+
   await tagsStore.saveTag({
     ...tag,
-    name: draft.name,
-    color: draft.color
+    name: tag.name.trim()
   });
+}
+
+function clearPendingTagSave(tagId: string): void {
+  const timer = pendingSaveTimers.get(tagId);
+  if (timer === undefined) {
+    return;
+  }
+
+  window.clearTimeout(timer);
+  pendingSaveTimers.delete(tagId);
 }
 
 async function removeTag(tag: Tag): Promise<void> {
@@ -45,15 +66,24 @@ async function removeTag(tag: Tag): Promise<void> {
     return;
   }
 
+  clearPendingTagSave(tag.id);
   await tagsStore.removeTag(tag.id);
 }
 
 async function moveTag(tag: Tag, direction: "up" | "down"): Promise<void> {
+  await flushTagSave(tag.id);
   await tagsStore.moveTag(tag.id, direction);
 }
 
 onMounted(() => {
   void tagsStore.loadTags();
+});
+
+onBeforeUnmount(() => {
+  for (const timer of pendingSaveTimers.values()) {
+    window.clearTimeout(timer);
+  }
+  pendingSaveTimers.clear();
 });
 </script>
 
@@ -92,15 +122,22 @@ onMounted(() => {
             <ArrowDown :size="16" />
           </button>
         </div>
-        <input v-model="ensureEditState(tag).name" class="field" />
         <input
-          v-model="ensureEditState(tag).color"
+          v-model="tag.name"
+          class="field"
+          required
+          @input="queueTagSave(tag.id)"
+          @blur="flushTagSave(tag.id)"
+        />
+        <input
+          v-model="tag.color"
           class="field color-field"
           type="color"
           aria-label="标签颜色"
+          @input="queueTagSave(tag.id)"
+          @change="flushTagSave(tag.id)"
         />
         <span class="list-meta">{{ tag.usageCount }} 人</span>
-        <button class="button" type="button" @click="saveTag(tag)">保存</button>
         <button class="button danger" type="button" @click="removeTag(tag)">删除</button>
       </div>
     </section>
