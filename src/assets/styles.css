@@ -413,6 +413,12 @@ textarea {
   width: 140px;
 }
 
+.top-n-field {
+  width: 88px;
+  min-height: 32px;
+  padding-inline: 8px;
+}
+
 .list-row,
 .score-row,
 .table-row,

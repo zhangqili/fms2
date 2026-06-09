@@ -517,11 +517,22 @@ function assignScoreRanks(metrics: PersonMetricAccumulator[]): void {
 
 function assignOverallRanks(metrics: PersonMetricAccumulator[]): void {
   const sorted = [...metrics].sort((left, right) => {
-    const leftAverageScore = overallRankScore(left);
-    const rightAverageScore = overallRankScore(right);
+    const leftRankScore = overallRankScore(left);
+    const rightRankScore = overallRankScore(right);
 
-    if (leftAverageScore !== rightAverageScore) {
-      return leftAverageScore - rightAverageScore;
+    if (leftRankScore !== rightRankScore) {
+      return leftRankScore - rightRankScore;
+    }
+
+    const weightedScoreDelta = right.weightedScore - left.weightedScore;
+    if (weightedScoreDelta !== 0) {
+      return weightedScoreDelta;
+    }
+
+    const peakTierRankDelta = (left.peakTierRank ?? Number.POSITIVE_INFINITY) -
+      (right.peakTierRank ?? Number.POSITIVE_INFINITY);
+    if (peakTierRankDelta !== 0) {
+      return peakTierRankDelta;
     }
 
     const weightedRankDelta = (left.weightedRank ?? Number.POSITIVE_INFINITY) -
@@ -533,13 +544,9 @@ function assignOverallRanks(metrics: PersonMetricAccumulator[]): void {
     return sortMetricByName(left, right);
   });
 
-  assignCompetitionRanks(
-    sorted,
-    overallRankScore,
-    (metric, rank) => {
-      metric.overallRank = rank;
-    }
-  );
+  sorted.forEach((metric, index) => {
+    metric.overallRank = index + 1;
+  });
 }
 
 function assignCompetitionRanks<T>(

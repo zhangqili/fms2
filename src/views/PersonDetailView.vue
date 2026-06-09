@@ -8,6 +8,7 @@ import {
   leaderboardDisplayDate,
   leaderboardDisplayDateSource,
   leaderboardDisplayOptionalTitle,
+  listLeaderboardsByDateAsc,
   listPersonLeaderboardHistory,
   type PersonLeaderboardHistoryItem,
   type PersonLeaderboardStats
@@ -16,7 +17,7 @@ import { getPerson } from "@/repositories/peopleRepository";
 import { usePeopleStore } from "@/stores/peopleStore";
 import { useTagsStore } from "@/stores/tagsStore";
 import { useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
-import type { Person } from "@/types/models";
+import type { Leaderboard, Person } from "@/types/models";
 import { displayDate } from "@/utils/dates";
 import { formatScore, movementText } from "@/utils/movement";
 
@@ -24,13 +25,21 @@ const props = defineProps<{
   id: string;
 }>();
 
+interface TopNStats {
+  count: number;
+  maxConsecutive: number;
+  lastLeaderboard: Leaderboard | null;
+}
+
 const router = useRouter();
 const peopleStore = usePeopleStore();
 const tagsStore = useTagsStore();
 const workspaceTabs = useWorkspaceTabsStore();
 const person = ref<Person | null>(null);
 const history = ref<PersonLeaderboardHistoryItem[]>([]);
+const allLeaderboards = ref<Leaderboard[]>([]);
 const stats = ref<PersonLeaderboardStats | null>(null);
+const topNLimit = ref<number | string>(3);
 const selectedTagIds = ref<string[]>([]);
 const isEditing = ref(false);
 const form = reactive({
@@ -44,6 +53,55 @@ const canSave = computed(() => form.name.trim().length > 0);
 const selectedTags = computed(() =>
   tagsStore.tags.filter((tag) => selectedTagIds.value.includes(tag.id))
 );
+const normalizedTopNLimit = computed(() => {
+  const text = String(topNLimit.value).trim();
+  if (!text) {
+    return 3;
+  }
+
+  const value = Number(text);
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 3;
+});
+const effectiveHistory = computed(() => history.value.filter(isEffectiveHistoryItem));
+const firstAppearanceItem = computed(() =>
+  [...effectiveHistory.value].sort((left, right) =>
+    compareLeaderboardsByDateAsc(left.leaderboard, right.leaderboard)
+  )[0] ?? null
+);
+const effectiveHistoryByLeaderboardId = computed(
+  () => new Map(effectiveHistory.value.map((item) => [item.leaderboard.id, item]))
+);
+const leaderboardOrderById = computed(
+  () => new Map(allLeaderboards.value.map((leaderboard, index) => [leaderboard.id, index]))
+);
+const topNStats = computed<TopNStats>(() => {
+  const limit = normalizedTopNLimit.value;
+  let count = 0;
+  let currentConsecutive = 0;
+  let maxConsecutive = 0;
+  let lastLeaderboard: Leaderboard | null = null;
+
+  for (const leaderboard of allLeaderboards.value) {
+    const item = effectiveHistoryByLeaderboardId.value.get(leaderboard.id);
+    const isTopN = item?.entry.rank !== null && (item?.entry.rank ?? Number.POSITIVE_INFINITY) <= limit;
+
+    if (!isTopN) {
+      currentConsecutive = 0;
+      continue;
+    }
+
+    count += 1;
+    currentConsecutive += 1;
+    maxConsecutive = Math.max(maxConsecutive, currentConsecutive);
+    lastLeaderboard = leaderboard;
+  }
+
+  return {
+    count,
+    maxConsecutive,
+    lastLeaderboard
+  };
+});
 
 function fillForm(nextPerson: Person, tagIds: string[]): void {
   form.name = nextPerson.name;
@@ -114,17 +172,23 @@ async function remove(): Promise<void> {
   await router.push("/people");
 }
 
-function openLeaderboardTab(item: PersonLeaderboardHistoryItem): void {
+function openLeaderboard(leaderboard: Leaderboard): void {
   workspaceTabs.openLeaderboardTab(
-    item.leaderboard.id,
-    leaderboardDisplayDate(item.leaderboard)
+    leaderboard.id,
+    leaderboardDisplayDate(leaderboard),
+    `/leaderboards/${leaderboard.id}`
   );
+}
+
+function openLeaderboardTab(item: PersonLeaderboardHistoryItem): void {
+  openLeaderboard(item.leaderboard);
 }
 
 async function loadPersonDetail(personId: string): Promise<void> {
   const currentVersion = ++loadVersion;
   person.value = null;
   history.value = [];
+  allLeaderboards.value = [];
   stats.value = null;
   isEditing.value = false;
 
@@ -133,12 +197,17 @@ async function loadPersonDetail(personId: string): Promise<void> {
     peopleStore.loadTagIdsForPerson(personId),
     tagsStore.loadTags()
   ]);
-  const [nextHistory, nextStats] = loadedPerson
-    ? await Promise.all([
-        listPersonLeaderboardHistory(loadedPerson.id),
-        getPersonLeaderboardStats(loadedPerson.id)
-      ])
-    : [[], null];
+  let nextHistory: PersonLeaderboardHistoryItem[] = [];
+  let nextStats: PersonLeaderboardStats | null = null;
+  let nextLeaderboards: Leaderboard[] = [];
+
+  if (loadedPerson) {
+    [nextHistory, nextStats, nextLeaderboards] = await Promise.all([
+      listPersonLeaderboardHistory(loadedPerson.id),
+      getPersonLeaderboardStats(loadedPerson.id),
+      listLeaderboardsByDateAsc()
+    ]);
+  }
 
   if (currentVersion !== loadVersion) {
     return;
@@ -148,9 +217,31 @@ async function loadPersonDetail(personId: string): Promise<void> {
   if (loadedPerson) {
     fillForm(loadedPerson, tagIds);
     history.value = nextHistory;
+    allLeaderboards.value = nextLeaderboards;
     stats.value = nextStats;
     workspaceTabs.updateTabTitle("person", loadedPerson.id, loadedPerson.name);
   }
+}
+
+function isEffectiveHistoryItem(item: PersonLeaderboardHistoryItem): boolean {
+  return item.entry.includedInRanking && item.entry.rank !== null && (item.entry.scoreSnapshot ?? 0) > 0;
+}
+
+function compareLeaderboardsByDateAsc(left: Leaderboard, right: Leaderboard): number {
+  const leftOrder = leaderboardOrderById.value.get(left.id) ?? Number.POSITIVE_INFINITY;
+  const rightOrder = leaderboardOrderById.value.get(right.id) ?? Number.POSITIVE_INFINITY;
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+
+  const timeDelta = leaderboardTime(left) - leaderboardTime(right);
+  return timeDelta !== 0 ? timeDelta : left.createdAt.localeCompare(right.createdAt);
+}
+
+function leaderboardTime(leaderboard: Leaderboard): number {
+  const source = leaderboardDisplayDateSource(leaderboard);
+  const time = source ? Date.parse(source) : 0;
+  return Number.isFinite(time) ? time : 0;
 }
 
 watch(
@@ -283,7 +374,17 @@ watch(
             <dt>加权点数</dt>
             <dd>{{ formatScore(stats?.weightedScore ?? 0) }}</dd>
             <dt>首次上榜日期</dt>
-            <dd>{{ displayDate(stats?.firstAppearanceDate ?? null) }}</dd>
+            <dd>
+              <RouterLink
+                v-if="firstAppearanceItem"
+                class="table-link"
+                :to="`/leaderboards/${firstAppearanceItem.leaderboard.id}`"
+                @click="openLeaderboard(firstAppearanceItem.leaderboard)"
+              >
+                {{ displayDate(leaderboardDisplayDateSource(firstAppearanceItem.leaderboard)) }}
+              </RouterLink>
+              <span v-else>-</span>
+            </dd>
             <dt>最高排名</dt>
             <dd>{{ stats?.peakRank ?? "-" }}</dd>
             <dt>最高排名对应分数</dt>
@@ -296,6 +397,34 @@ watch(
             <dd>{{ stats?.peakTierRank ?? "-" }}</dd>
             <dt>总榜排名</dt>
             <dd>{{ stats?.overallRank ?? "-" }}</dd>
+            <dt>前 N 名</dt>
+            <dd>
+              <input
+                v-model="topNLimit"
+                class="field top-n-field"
+                type="number"
+                min="1"
+                step="1"
+                inputmode="numeric"
+                aria-label="前 N 名数量"
+              />
+            </dd>
+            <dt>前 {{ normalizedTopNLimit }} 名次数</dt>
+            <dd>{{ topNStats.count }}</dd>
+            <dt>最大连续前 {{ normalizedTopNLimit }} 名数量</dt>
+            <dd>{{ topNStats.maxConsecutive }}</dd>
+            <dt>上次位于前 {{ normalizedTopNLimit }} 名日期</dt>
+            <dd>
+              <RouterLink
+                v-if="topNStats.lastLeaderboard"
+                class="table-link"
+                :to="`/leaderboards/${topNStats.lastLeaderboard.id}`"
+                @click="openLeaderboard(topNStats.lastLeaderboard)"
+              >
+                {{ displayDate(leaderboardDisplayDateSource(topNStats.lastLeaderboard)) }}
+              </RouterLink>
+              <span v-else>-</span>
+            </dd>
           </dl>
         </section>
       </aside>
