@@ -7,7 +7,7 @@ import {
 import type { Leaderboard, LeaderboardEntry, Person, PersonTag, Tag } from "@/types/models";
 import type { WorkBook } from "xlsx";
 
-type CellValue = string | number;
+type CellValue = string | number | null;
 type XlsxModule = typeof import("xlsx") & {
   default?: {
     CFB?: XlsxCfb;
@@ -70,6 +70,11 @@ export async function exportOverallWorkbook(options: OverallWorkbookOptions): Pr
     workbook,
     utils.aoa_to_sheet(buildRankStatsRows(sortedPeople, selectedLeaderboards, effectiveEntryByKey)),
     "位次统计"
+  );
+  utils.book_append_sheet(
+    workbook,
+    utils.aoa_to_sheet(buildOverallRankTrendRows(sortedPeople, selectedLeaderboards, selectedEntries)),
+    "总榜排名走势"
   );
 
   return workbook;
@@ -258,6 +263,44 @@ function buildRankStatsRows(
   }
 
   return rows;
+}
+
+function buildOverallRankTrendRows(
+  people: Person[],
+  leaderboards: Leaderboard[],
+  entries: LeaderboardEntry[]
+): CellValue[][] {
+  const entriesByLeaderboardId = new Map<string, LeaderboardEntry[]>();
+  const accumulatedEntries: LeaderboardEntry[] = [];
+  const overallRankByKey = new Map<string, number | null>();
+
+  for (const entry of entries) {
+    const groupedEntries = entriesByLeaderboardId.get(entry.leaderboardId) ?? [];
+    groupedEntries.push(entry);
+    entriesByLeaderboardId.set(entry.leaderboardId, groupedEntries);
+  }
+
+  for (const leaderboard of leaderboards) {
+    accumulatedEntries.push(...(entriesByLeaderboardId.get(leaderboard.id) ?? []));
+    const metricByPersonId = new Map(
+      calculatePersonOverallMetrics(people, accumulatedEntries).map((metric) => [metric.personId, metric])
+    );
+
+    for (const person of people) {
+      overallRankByKey.set(
+        entryKey(leaderboard.id, person.id),
+        metricByPersonId.get(person.id)?.overallRank ?? null
+      );
+    }
+  }
+
+  return [
+    ["姓名", ...leaderboards.map((leaderboard) => leaderboardDigitalDate(leaderboard))],
+    ...people.map((person) => [
+      person.name,
+      ...leaderboards.map((leaderboard) => overallRankByKey.get(entryKey(leaderboard.id, person.id)) ?? null)
+    ])
+  ];
 }
 
 function buildLegacyTagRows(

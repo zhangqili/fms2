@@ -15,6 +15,87 @@ import {
 } from "@/repositories/peopleRepository";
 import type { Person } from "@/types/models";
 
+export type PeopleArchiveFilter = "active" | "all" | "archived";
+export type PeopleFilterGroupOperator = "and" | "or";
+export type PeopleFilterConditionType = "query" | "archive" | "hasTag" | "notHasTag" | "metric";
+export type PeopleMetricRangeKey =
+  | "appearanceCount"
+  | "totalScore"
+  | "weightedScore"
+  | "overallRank"
+  | "peakTierRank"
+  | "highestScore";
+export type PeopleSortKey =
+  | "overallRank"
+  | "totalScore"
+  | "weightedScore"
+  | "peakTierRank"
+  | "highestScore"
+  | "appearanceCount"
+  | "name"
+  | "createdAt"
+  | "updatedAt";
+export type PeopleSortDirection = "asc" | "desc";
+export type PeopleMetricConditionOperator = "gte" | "lte" | "between";
+
+export interface PeopleFilterCondition {
+  id: string;
+  kind: "condition";
+  type: PeopleFilterConditionType;
+  query: string;
+  archiveMode: PeopleArchiveFilter;
+  tagId: string;
+  metricKey: PeopleMetricRangeKey;
+  metricOperator: PeopleMetricConditionOperator;
+  min: string;
+  max: string;
+}
+
+export interface PeopleFilterGroup {
+  id: string;
+  kind: "group";
+  operator: PeopleFilterGroupOperator;
+  items: PeopleFilterNode[];
+}
+
+export type PeopleFilterNode = PeopleFilterCondition | PeopleFilterGroup;
+
+export interface PeopleFilterState {
+  quickQuery: string;
+  quickTagIds: string[];
+  rootGroup: PeopleFilterGroup;
+  sortKey: PeopleSortKey;
+  sortDirection: PeopleSortDirection;
+}
+
+function createDefaultPeopleFilterState(): PeopleFilterState {
+  return {
+    quickQuery: "",
+    quickTagIds: [],
+    rootGroup: {
+      id: "root",
+      kind: "group",
+      operator: "and",
+      items: [
+        {
+          id: "default-active-archive",
+          kind: "condition",
+          type: "archive",
+          query: "",
+          archiveMode: "active",
+          tagId: "",
+          metricKey: "overallRank",
+          metricOperator: "between",
+          min: "",
+          max: ""
+        }
+      ]
+    },
+    sortKey: "overallRank",
+    sortDirection: "asc"
+  };
+}
+
 export const usePeopleStore = defineStore("people", () => {
   const people = ref<Person[]>([]);
   const tagIdsByPersonId = ref<Record<string, string[]>>({});
@@ -23,6 +104,7 @@ export const usePeopleStore = defineStore("people", () => {
   const query = ref("");
   const selectedTagIds = ref<string[]>([]);
   const sort = ref<PeopleListOptions["sort"]>("name");
+  const filterState = ref<PeopleFilterState>(createDefaultPeopleFilterState());
 
   const activePeople = computed(() => people.value.filter((person) => !person.archived));
 
@@ -93,6 +175,10 @@ export const usePeopleStore = defineStore("people", () => {
       : [...selectedTagIds.value, tagId];
   }
 
+  function resetPeopleFilters(): void {
+    filterState.value = createDefaultPeopleFilterState();
+  }
+
   return {
     people,
     activePeople,
@@ -102,6 +188,7 @@ export const usePeopleStore = defineStore("people", () => {
     query,
     selectedTagIds,
     sort,
+    filterState,
     loadPeople,
     loadPersonTagSummaries,
     addPerson,
@@ -111,6 +198,7 @@ export const usePeopleStore = defineStore("people", () => {
     loadTagIdsForPerson,
     setQuery,
     setIncludeArchived,
-    toggleSelectedTag
+    toggleSelectedTag,
+    resetPeopleFilters
   };
 });

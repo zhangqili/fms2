@@ -405,6 +405,110 @@ textarea {
   background: #ffffff;
 }
 
+.people-search-field {
+  flex: 1 1 260px;
+}
+
+.quick-tag-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.people-filter-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.people-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.people-filter-grid .field-label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 0;
+  color: #657276;
+  font-size: 0.875rem;
+}
+
+.filter-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.people-filter-block {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #edf2f0;
+}
+
+.filter-group-editor {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  margin-left: calc(var(--filter-depth, 0) * 14px);
+  border: 1px solid #d7e3e0;
+  border-left: 4px solid color-mix(in srgb, var(--theme-color) 70%, #ffffff);
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--theme-soft) 0, #fbfdfc 44px);
+  box-shadow: 0 1px 2px rgb(24 35 39 / 6%);
+}
+
+.filter-group-editor.root {
+  margin-left: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.filter-group-header {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(220px, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 74%);
+}
+
+.condition-list {
+  display: grid;
+  gap: 8px;
+}
+
+.filter-condition-row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #edf2f0;
+  border-left: 3px solid #cad8d6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.condition-value {
+  min-width: 0;
+}
+
+.metric-condition-fields {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 96px minmax(90px, 0.75fr) minmax(90px, 0.75fr);
+  gap: 8px;
+}
+
+.metric-range-field {
+  min-height: 34px;
+  padding-inline: 8px;
+}
+
 .text-field {
   min-height: 92px;
   padding-block: 10px;
@@ -1118,6 +1222,21 @@ textarea {
 
   .range-picker {
     grid-template-columns: 1fr;
+  }
+
+  .people-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-add-row,
+  .filter-group-header,
+  .filter-condition-row,
+  .metric-condition-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-group-editor {
+    margin-left: calc(var(--filter-depth, 0) * 8px);
   }
 
   .leaderboard-form-grid {
