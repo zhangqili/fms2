@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, defineAsyncComponent, reactive, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 
 import PageHeader from "@/components/PageHeader.vue";
@@ -31,6 +31,14 @@ interface TopNStats {
   lastLeaderboard: Leaderboard | null;
 }
 
+interface PersonTrendPoint {
+  leaderboardId: string;
+  dateLabel: string;
+  score: number | null;
+  rank: number | null;
+}
+
+const PersonTrendChart = defineAsyncComponent(() => import("@/components/PersonTrendChart.vue"));
 const router = useRouter();
 const peopleStore = usePeopleStore();
 const tagsStore = useTagsStore();
@@ -102,6 +110,18 @@ const topNStats = computed<TopNStats>(() => {
     lastLeaderboard
   };
 });
+const trendPoints = computed<PersonTrendPoint[]>(() =>
+  allLeaderboards.value.map((leaderboard) => {
+    const item = effectiveHistoryByLeaderboardId.value.get(leaderboard.id);
+
+    return {
+      leaderboardId: leaderboard.id,
+      dateLabel: displayDate(leaderboardDisplayDateSource(leaderboard)),
+      score: item?.entry.scoreSnapshot ?? null,
+      rank: item?.entry.rank ?? null
+    };
+  })
+);
 
 function fillForm(nextPerson: Person, tagIds: string[]): void {
   form.name = nextPerson.name;
@@ -184,6 +204,16 @@ function openLeaderboardTab(item: PersonLeaderboardHistoryItem): void {
   openLeaderboard(item.leaderboard);
 }
 
+async function openTrendLeaderboard(leaderboardId: string): Promise<void> {
+  const leaderboard = allLeaderboards.value.find((item) => item.id === leaderboardId);
+  if (!leaderboard) {
+    return;
+  }
+
+  openLeaderboard(leaderboard);
+  await router.push(`/leaderboards/${leaderboard.id}`);
+}
+
 async function loadPersonDetail(personId: string): Promise<void> {
   const currentVersion = ++loadVersion;
   person.value = null;
@@ -263,6 +293,13 @@ watch(
 
     <div v-else class="detail-layout">
       <main class="detail-main">
+        <section class="panel">
+          <div class="section-title">
+            <h2>趋势</h2>
+          </div>
+          <PersonTrendChart :points="trendPoints" @select="openTrendLeaderboard" />
+        </section>
+
         <section class="panel">
           <div class="section-title">
             <h2>历史榜单</h2>

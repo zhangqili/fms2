@@ -565,6 +565,12 @@ textarea {
   gap: 10px;
 }
 
+.person-trend-chart {
+  width: 100%;
+  min-width: 0;
+  height: 280px;
+}
+
 .readonly-tags {
   margin-left: 0;
 }
