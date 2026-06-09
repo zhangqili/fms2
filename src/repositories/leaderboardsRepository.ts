@@ -36,6 +36,29 @@ export interface PersonOverallMetric {
   effectiveEntryCount: number;
 }
 
+export interface PersonOverallRankHistoryItem {
+  leaderboardId: string;
+  overallRank: number | null;
+}
+
+export interface PeopleCompareTrendPoint {
+  leaderboardId: string;
+  score: number | null;
+  rank: number | null;
+  overallRank: number | null;
+}
+
+export interface PeopleCompareTrendSeries {
+  personId: string;
+  personName: string;
+  points: PeopleCompareTrendPoint[];
+}
+
+export interface PeopleCompareTrendData {
+  leaderboards: Leaderboard[];
+  series: PeopleCompareTrendSeries[];
+}
+
 export interface LeaderboardSummary {
   includedCount: number;
   outCount: number;
@@ -333,6 +356,125 @@ export async function listPersonOverallMetrics(): Promise<PersonOverallMetric[]>
   ]);
 
   return calculatePersonOverallMetrics(people, entries);
+}
+
+export async function listPersonOverallRankHistory(
+  personId: string
+): Promise<PersonOverallRankHistoryItem[]> {
+  const [people, leaderboards, entries] = await Promise.all([
+    db.people.toArray(),
+    db.leaderboards.toArray(),
+    db.leaderboard_entries.toArray()
+  ]);
+
+  return calculatePersonOverallRankHistory(personId, people, leaderboards, entries);
+}
+
+export async function getPeopleCompareTrendData(
+  personIds: string[]
+): Promise<PeopleCompareTrendData> {
+  const [people, leaderboards, entries] = await Promise.all([
+    db.people.toArray(),
+    db.leaderboards.toArray(),
+    db.leaderboard_entries.toArray()
+  ]);
+
+  return calculatePeopleCompareTrendData(personIds, people, leaderboards, entries);
+}
+
+export function calculatePersonOverallRankHistory(
+  personId: string,
+  people: Person[],
+  leaderboards: Leaderboard[],
+  entries: LeaderboardEntry[]
+): PersonOverallRankHistoryItem[] {
+  const entriesByLeaderboardId = new Map<string, LeaderboardEntry[]>();
+  const accumulatedEntries: LeaderboardEntry[] = [];
+
+  for (const entry of entries) {
+    const groupedEntries = entriesByLeaderboardId.get(entry.leaderboardId) ?? [];
+    groupedEntries.push(entry);
+    entriesByLeaderboardId.set(entry.leaderboardId, groupedEntries);
+  }
+
+  return sortLeaderboardsByDateAsc(leaderboards).map((leaderboard) => {
+    accumulatedEntries.push(...(entriesByLeaderboardId.get(leaderboard.id) ?? []));
+    const metric = calculatePersonOverallMetrics(people, accumulatedEntries)
+      .find((item) => item.personId === personId);
+
+    return {
+      leaderboardId: leaderboard.id,
+      overallRank: metric?.overallRank ?? null
+    };
+  });
+}
+
+export function calculatePeopleCompareTrendData(
+  personIds: string[],
+  people: Person[],
+  leaderboards: Leaderboard[],
+  entries: LeaderboardEntry[]
+): PeopleCompareTrendData {
+  const selectedPersonIds = [...new Set(personIds)];
+  const selectedPersonIdSet = new Set(selectedPersonIds);
+  const sortedLeaderboards = sortLeaderboardsByDateAsc(leaderboards);
+  const personById = new Map(people.map((person) => [person.id, person]));
+  const entriesByLeaderboardId = new Map<string, LeaderboardEntry[]>();
+  const effectiveEntryByKey = new Map<string, LeaderboardEntry>();
+  const overallRankByKey = new Map<string, number | null>();
+  const accumulatedEntries: LeaderboardEntry[] = [];
+
+  for (const entry of entries) {
+    const groupedEntries = entriesByLeaderboardId.get(entry.leaderboardId) ?? [];
+    groupedEntries.push(entry);
+    entriesByLeaderboardId.set(entry.leaderboardId, groupedEntries);
+
+    if (selectedPersonIdSet.has(entry.personId) && isEffectiveScoredEntry(entry)) {
+      effectiveEntryByKey.set(compareTrendKey(entry.leaderboardId, entry.personId), entry);
+    }
+  }
+
+  for (const leaderboard of sortedLeaderboards) {
+    accumulatedEntries.push(...(entriesByLeaderboardId.get(leaderboard.id) ?? []));
+    const metricByPersonId = new Map(
+      calculatePersonOverallMetrics(people, accumulatedEntries).map((metric) => [metric.personId, metric])
+    );
+
+    for (const personId of selectedPersonIds) {
+      overallRankByKey.set(
+        compareTrendKey(leaderboard.id, personId),
+        metricByPersonId.get(personId)?.overallRank ?? null
+      );
+    }
+  }
+
+  return {
+    leaderboards: sortedLeaderboards,
+    series: selectedPersonIds
+      .map((personId) => {
+        const person = personById.get(personId);
+        if (!person) {
+          return null;
+        }
+
+        return {
+          personId,
+          personName: person.name,
+          points: sortedLeaderboards.map((leaderboard) => {
+            const key = compareTrendKey(leaderboard.id, personId);
+            const entry = effectiveEntryByKey.get(key);
+
+            return {
+              leaderboardId: leaderboard.id,
+              score: entry?.scoreSnapshot ?? null,
+              rank: entry?.rank ?? null,
+              overallRank: overallRankByKey.get(key) ?? null
+            };
+          })
+        };
+      })
+      .filter((item): item is PeopleCompareTrendSeries => item !== null)
+  };
 }
 
 export function calculatePersonOverallMetrics(
@@ -643,6 +785,10 @@ function sortLeaderboardsByDateAsc(leaderboards: Leaderboard[]): Leaderboard[] {
 
 function isEffectiveScoredEntry(entry: LeaderboardEntry): boolean {
   return entry.includedInRanking && entry.rank !== null && (entry.scoreSnapshot ?? 0) > 0;
+}
+
+function compareTrendKey(leaderboardId: string, personId: string): string {
+  return `${leaderboardId}:${personId}`;
 }
 
 function sortMetricByName(left: PersonMetricAccumulator, right: PersonMetricAccumulator): number {

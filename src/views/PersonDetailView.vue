@@ -9,9 +9,11 @@ import {
   leaderboardDisplayDateSource,
   leaderboardDisplayOptionalTitle,
   listLeaderboardsByDateAsc,
+  listPersonOverallRankHistory,
   listPersonLeaderboardHistory,
   type PersonLeaderboardHistoryItem,
-  type PersonLeaderboardStats
+  type PersonLeaderboardStats,
+  type PersonOverallRankHistoryItem
 } from "@/repositories/leaderboardsRepository";
 import { getPerson } from "@/repositories/peopleRepository";
 import { usePeopleStore } from "@/stores/peopleStore";
@@ -36,7 +38,10 @@ interface PersonTrendPoint {
   dateLabel: string;
   score: number | null;
   rank: number | null;
+  overallRank: number | null;
 }
+
+type PersonTrendMode = "score-rank" | "overall-rank";
 
 const PersonTrendChart = defineAsyncComponent(() => import("@/components/PersonTrendChart.vue"));
 const router = useRouter();
@@ -46,8 +51,10 @@ const workspaceTabs = useWorkspaceTabsStore();
 const person = ref<Person | null>(null);
 const history = ref<PersonLeaderboardHistoryItem[]>([]);
 const allLeaderboards = ref<Leaderboard[]>([]);
+const overallRankHistory = ref<PersonOverallRankHistoryItem[]>([]);
 const stats = ref<PersonLeaderboardStats | null>(null);
 const topNLimit = ref<number | string>(3);
+const trendMode = ref<PersonTrendMode>("score-rank");
 const selectedTagIds = ref<string[]>([]);
 const isEditing = ref(false);
 const form = reactive({
@@ -81,6 +88,9 @@ const effectiveHistoryByLeaderboardId = computed(
 );
 const leaderboardOrderById = computed(
   () => new Map(allLeaderboards.value.map((leaderboard, index) => [leaderboard.id, index]))
+);
+const overallRankByLeaderboardId = computed(
+  () => new Map(overallRankHistory.value.map((item) => [item.leaderboardId, item.overallRank]))
 );
 const topNStats = computed<TopNStats>(() => {
   const limit = normalizedTopNLimit.value;
@@ -118,7 +128,8 @@ const trendPoints = computed<PersonTrendPoint[]>(() =>
       leaderboardId: leaderboard.id,
       dateLabel: displayDate(leaderboardDisplayDateSource(leaderboard)),
       score: item?.entry.scoreSnapshot ?? null,
-      rank: item?.entry.rank ?? null
+      rank: item?.entry.rank ?? null,
+      overallRank: overallRankByLeaderboardId.value.get(leaderboard.id) ?? null
     };
   })
 );
@@ -219,6 +230,7 @@ async function loadPersonDetail(personId: string): Promise<void> {
   person.value = null;
   history.value = [];
   allLeaderboards.value = [];
+  overallRankHistory.value = [];
   stats.value = null;
   isEditing.value = false;
 
@@ -230,12 +242,14 @@ async function loadPersonDetail(personId: string): Promise<void> {
   let nextHistory: PersonLeaderboardHistoryItem[] = [];
   let nextStats: PersonLeaderboardStats | null = null;
   let nextLeaderboards: Leaderboard[] = [];
+  let nextOverallRankHistory: PersonOverallRankHistoryItem[] = [];
 
   if (loadedPerson) {
-    [nextHistory, nextStats, nextLeaderboards] = await Promise.all([
+    [nextHistory, nextStats, nextLeaderboards, nextOverallRankHistory] = await Promise.all([
       listPersonLeaderboardHistory(loadedPerson.id),
       getPersonLeaderboardStats(loadedPerson.id),
-      listLeaderboardsByDateAsc()
+      listLeaderboardsByDateAsc(),
+      listPersonOverallRankHistory(loadedPerson.id)
     ]);
   }
 
@@ -248,6 +262,7 @@ async function loadPersonDetail(personId: string): Promise<void> {
     fillForm(loadedPerson, tagIds);
     history.value = nextHistory;
     allLeaderboards.value = nextLeaderboards;
+    overallRankHistory.value = nextOverallRankHistory;
     stats.value = nextStats;
     workspaceTabs.updateTabTitle("person", loadedPerson.id, loadedPerson.name);
   }
@@ -296,8 +311,30 @@ watch(
         <section class="panel">
           <div class="section-title">
             <h2>趋势</h2>
+            <div class="chart-mode-toggle" role="tablist" aria-label="趋势图类型">
+              <button
+                class="chart-mode-button"
+                :class="{ selected: trendMode === 'score-rank' }"
+                type="button"
+                role="tab"
+                :aria-selected="trendMode === 'score-rank'"
+                @click="trendMode = 'score-rank'"
+              >
+                分数/排名
+              </button>
+              <button
+                class="chart-mode-button"
+                :class="{ selected: trendMode === 'overall-rank' }"
+                type="button"
+                role="tab"
+                :aria-selected="trendMode === 'overall-rank'"
+                @click="trendMode = 'overall-rank'"
+              >
+                总榜排名
+              </button>
+            </div>
           </div>
-          <PersonTrendChart :points="trendPoints" @select="openTrendLeaderboard" />
+          <PersonTrendChart :mode="trendMode" :points="trendPoints" @select="openTrendLeaderboard" />
         </section>
 
         <section class="panel">

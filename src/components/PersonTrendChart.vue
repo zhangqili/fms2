@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { LineChart, type LineSeriesOption } from "echarts/charts";
 import {
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
   TooltipComponent,
+  type DataZoomComponentOption,
   type GridComponentOption,
   type LegendComponentOption,
   type TooltipComponentOption
@@ -15,20 +17,24 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 
 import { formatScore } from "@/utils/movement";
 
-echarts.use([GridComponent, LegendComponent, LineChart, TooltipComponent, CanvasRenderer]);
+echarts.use([DataZoomComponent, GridComponent, LegendComponent, LineChart, TooltipComponent, CanvasRenderer]);
 
 export interface PersonTrendPoint {
   leaderboardId: string;
   dateLabel: string;
   score: number | null;
   rank: number | null;
+  overallRank: number | null;
 }
 
+export type PersonTrendChartMode = "score-rank" | "overall-rank";
+
 type ChartOption = ComposeOption<
-  GridComponentOption | LegendComponentOption | LineSeriesOption | TooltipComponentOption
+  DataZoomComponentOption | GridComponentOption | LegendComponentOption | LineSeriesOption | TooltipComponentOption
 >;
 
 const props = defineProps<{
+  mode: PersonTrendChartMode;
   points: PersonTrendPoint[];
 }>();
 
@@ -37,14 +43,12 @@ const emit = defineEmits<{
 }>();
 
 const chartEl = ref<HTMLElement | null>(null);
-const hasValidPoints = computed(() =>
-  props.points.some((point) => point.score !== null && point.rank !== null)
-);
+const hasValidPoints = computed(() => props.points.some(isPointVisible));
 let chart: ECharts | null = null;
 let resizeObserver: ResizeObserver | null = null;
 
 watch(
-  () => props.points,
+  () => [props.mode, props.points],
   () => {
     void nextTick(renderChart);
   },
@@ -94,12 +98,131 @@ function buildOption(): ChartOption {
   const scoreColor = cssVariable("--theme-color", "#5b2a86");
   const rankColor = cssVariable("--theme-accent", "#d4af37");
 
+  if (props.mode === "overall-rank") {
+    return {
+      animation: false,
+      grid: {
+        top: 28,
+        right: 60,
+        bottom: 70,
+        left: 52
+      },
+      legend: {
+        show: false
+      },
+      tooltip: {
+        trigger: "axis",
+        transitionDuration: 0,
+        axisPointer: {
+          animation: false
+        },
+        formatter: formatTooltip
+      },
+      dataZoom: [
+        {
+          type: "inside",
+          xAxisIndex: 0,
+          filterMode: "none",
+          zoomOnMouseWheel: "ctrl",
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false
+        },
+        {
+          type: "inside",
+          yAxisIndex: 0,
+          filterMode: "none",
+          zoomOnMouseWheel: "alt",
+          moveOnMouseMove: false,
+          moveOnMouseWheel: false
+        },
+        {
+          type: "slider",
+          xAxisIndex: 0,
+          filterMode: "none",
+          height: 20,
+          bottom: 8,
+          borderColor: "#cad8d6",
+          fillerColor: "rgba(91, 42, 134, 0.16)",
+          handleStyle: {
+            color: scoreColor
+          },
+          textStyle: {
+            color: "#657276"
+          }
+        },
+        {
+          type: "slider",
+          yAxisIndex: 0,
+          filterMode: "none",
+          width: 18,
+          right: 8,
+          top: 30,
+          bottom: 70,
+          borderColor: "#cad8d6",
+          fillerColor: "rgba(91, 42, 134, 0.16)",
+          handleStyle: {
+            color: scoreColor
+          },
+          textStyle: {
+            color: "#657276"
+          }
+        }
+      ],
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: props.points.map((point) => point.dateLabel),
+        axisLabel: {
+          color: "#657276"
+        },
+        axisLine: {
+          lineStyle: {
+            color: "#cad8d6"
+          }
+        }
+      },
+      yAxis: {
+        type: "value",
+        name: "总榜排名",
+        inverse: true,
+        min: 1,
+        minInterval: 1,
+        axisLabel: {
+          color: "#657276",
+          formatter: "{value}"
+        },
+        splitLine: {
+          lineStyle: {
+            color: "#edf2f0"
+          }
+        }
+      },
+      series: [
+        {
+          name: "总榜排名",
+          type: "line",
+          connectNulls: false,
+          showSymbol: false,
+          symbolSize: 7,
+          data: props.points.map((point) => point.overallRank),
+          lineStyle: {
+            width: 2,
+            color: scoreColor
+          },
+          itemStyle: {
+            color: scoreColor
+          }
+        }
+      ]
+    };
+  }
+
   return {
-    animation: true,
+    animation: false,
     grid: {
       top: 40,
-      right: 48,
-      bottom: 36,
+      right: 70,
+      bottom: 70,
       left: 52
     },
     legend: {
@@ -113,8 +236,62 @@ function buildOption(): ChartOption {
     },
     tooltip: {
       trigger: "axis",
+      transitionDuration: 0,
+      axisPointer: {
+        animation: false
+      },
       formatter: formatTooltip
     },
+    dataZoom: [
+      {
+        type: "inside",
+        xAxisIndex: 0,
+        filterMode: "none",
+        zoomOnMouseWheel: "ctrl",
+        moveOnMouseMove: true,
+        moveOnMouseWheel: false
+      },
+      {
+        type: "inside",
+        yAxisIndex: [0, 1],
+        filterMode: "none",
+        zoomOnMouseWheel: "alt",
+        moveOnMouseMove: false,
+        moveOnMouseWheel: false
+      },
+      {
+        type: "slider",
+        xAxisIndex: 0,
+        filterMode: "none",
+        height: 20,
+        bottom: 8,
+        borderColor: "#cad8d6",
+        fillerColor: "rgba(91, 42, 134, 0.16)",
+        handleStyle: {
+          color: scoreColor
+        },
+        textStyle: {
+          color: "#657276"
+        }
+      },
+      {
+        type: "slider",
+        yAxisIndex: [0, 1],
+        filterMode: "none",
+        width: 18,
+        right: 8,
+        top: 42,
+        bottom: 70,
+        borderColor: "#cad8d6",
+        fillerColor: "rgba(91, 42, 134, 0.16)",
+        handleStyle: {
+          color: scoreColor
+        },
+        textStyle: {
+          color: "#657276"
+        }
+      }
+    ],
     xAxis: {
       type: "category",
       boundaryGap: false,
@@ -163,7 +340,7 @@ function buildOption(): ChartOption {
         type: "line",
         yAxisIndex: 0,
         connectNulls: false,
-        showSymbol: true,
+        showSymbol: false,
         symbolSize: 7,
         data: props.points.map((point) => point.score),
         lineStyle: {
@@ -179,7 +356,7 @@ function buildOption(): ChartOption {
         type: "line",
         yAxisIndex: 1,
         connectNulls: false,
-        showSymbol: true,
+        showSymbol: false,
         symbolSize: 7,
         data: props.points.map((point) => point.rank),
         lineStyle: {
@@ -206,6 +383,13 @@ function formatTooltip(params: unknown): string {
     return "";
   }
 
+  if (props.mode === "overall-rank") {
+    return [
+      `<strong>${escapeHtml(point.dateLabel)}</strong>`,
+      `总榜排名：${point.overallRank ?? "-"}`
+    ].join("<br />");
+  }
+
   return [
     `<strong>${escapeHtml(point.dateLabel)}</strong>`,
     `分数：${escapeHtml(formatScore(point.score))}`,
@@ -217,11 +401,17 @@ function handlePointClick(event: ECElementEvent): void {
   const dataIndex = typeof event.dataIndex === "number" ? event.dataIndex : -1;
   const point = props.points[dataIndex];
 
-  if (!point || point.score === null || point.rank === null) {
+  if (!point || !isPointVisible(point)) {
     return;
   }
 
   emit("select", point.leaderboardId);
+}
+
+function isPointVisible(point: PersonTrendPoint): boolean {
+  return props.mode === "overall-rank"
+    ? point.overallRank !== null
+    : point.score !== null && point.rank !== null;
 }
 
 function escapeHtml(value: string): string {
@@ -245,5 +435,11 @@ function cssVariable(name: string, fallback: string): string {
 
 <template>
   <p v-if="!hasValidPoints" class="empty">暂无可绘制的有效趋势数据。</p>
-  <div v-else ref="chartEl" class="person-trend-chart" role="img" aria-label="人员分数和排名趋势图" />
+  <div
+    v-else
+    ref="chartEl"
+    class="person-trend-chart"
+    role="img"
+    :aria-label="mode === 'overall-rank' ? '人员历史总榜排名趋势图' : '人员分数和排名趋势图'"
+  />
 </template>

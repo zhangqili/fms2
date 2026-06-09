@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 
+import CompareView from "@/views/CompareView.vue";
 import CreateLeaderboardView from "@/views/CreateLeaderboardView.vue";
 import ExportsView from "@/views/ExportsView.vue";
 import HomeView from "@/views/HomeView.vue";
@@ -16,6 +17,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/people/:id", name: "person-detail", component: PersonDetailView, props: true },
   { path: "/tags", name: "tags", component: TagsView },
   { path: "/leaderboards", name: "leaderboards", component: LeaderboardsView },
+  { path: "/compare", name: "compare", component: CompareView },
   { path: "/leaderboards/new", name: "create-leaderboard", component: CreateLeaderboardView },
   {
     path: "/leaderboards/:id",

@@ -239,6 +239,13 @@ textarea {
   min-height: 0;
 }
 
+.compare-page {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: calc(100vh - 64px);
+  max-width: 1400px;
+  min-height: 0;
+}
+
 .workspace-tabs + .detail-page {
   height: calc(100vh - 127px);
 }
@@ -569,6 +576,54 @@ textarea {
   width: 100%;
   min-width: 0;
   height: 280px;
+}
+
+.people-compare-chart {
+  width: 100%;
+  min-width: 0;
+  height: min(620px, calc(100vh - 210px));
+  min-height: 360px;
+}
+
+.chart-mode-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #cad8d6;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+
+.chart-mode-button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  color: #3c4b50;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chart-mode-button.selected {
+  color: #ffffff;
+  background: var(--theme-color);
+}
+
+.compare-layout {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.compare-chart-panel {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+  gap: 12px;
+}
+
+.compare-chart-panel {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .readonly-tags {
@@ -999,7 +1054,7 @@ textarea {
   }
 
   .nav-list {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .nav-link {
@@ -1038,6 +1093,23 @@ textarea {
 
   .export-layout {
     grid-template-columns: 1fr;
+  }
+
+  .compare-page {
+    height: auto;
+  }
+
+  .compare-layout {
+    overflow: visible;
+  }
+
+  .compare-chart-panel {
+    overflow: visible;
+  }
+
+  .people-compare-chart {
+    height: 360px;
+    min-height: 320px;
   }
 
   .selection-list {
