@@ -4,9 +4,11 @@ import { computed, onMounted, ref } from "vue";
 import PageHeader from "@/components/PageHeader.vue";
 import {
   downloadWorkbook,
+  exportLeaderboardTopTenAverageWorkbook,
   exportOverallWorkbook,
   leaderboardDigitalDate,
-  overallExportFilename
+  overallExportFilename,
+  topTenAverageExportFilename
 } from "@/repositories/excelExportRepository";
 import {
   leaderboardDisplayOptionalTitle,
@@ -29,14 +31,19 @@ const personRangeStartId = ref("");
 const personRangeEndId = ref("");
 const loading = ref(false);
 const exporting = ref(false);
+const exportingTopTenAverage = ref(false);
 const exportError = ref("");
 
 const metricByPersonId = computed(() => new Map(metrics.value.map((metric) => [metric.personId, metric])));
 const selectedCellCount = computed(
   () => selectedLeaderboardIds.value.length * selectedPersonIds.value.length
 );
+const isExporting = computed(() => exporting.value || exportingTopTenAverage.value);
 const canExport = computed(
-  () => selectedLeaderboardIds.value.length > 0 && selectedPersonIds.value.length > 0 && !exporting.value
+  () => selectedLeaderboardIds.value.length > 0 && selectedPersonIds.value.length > 0 && !isExporting.value
+);
+const canExportTopTenAverage = computed(
+  () => leaderboards.value.length > 0 && !isExporting.value
 );
 
 async function loadExportData(): Promise<void> {
@@ -82,6 +89,23 @@ async function exportOverall(): Promise<void> {
     exportError.value = error instanceof Error ? error.message : "导出失败。";
   } finally {
     exporting.value = false;
+  }
+}
+
+async function exportTopTenAverage(): Promise<void> {
+  if (!canExportTopTenAverage.value) {
+    return;
+  }
+
+  exportingTopTenAverage.value = true;
+  exportError.value = "";
+  try {
+    const workbook = await exportLeaderboardTopTenAverageWorkbook();
+    await downloadWorkbook(workbook, topTenAverageExportFilename());
+  } catch (error) {
+    exportError.value = error instanceof Error ? error.message : "导出失败。";
+  } finally {
+    exportingTopTenAverage.value = false;
   }
 }
 
@@ -151,9 +175,14 @@ onMounted(() => {
 <template>
   <section class="page">
     <PageHeader title="导出" description="选择日期和人员范围，生成总榜 Excel。">
-      <button class="button primary" type="button" :disabled="!canExport" @click="exportOverall">
-        {{ exporting ? "导出中" : "导出总榜" }}
-      </button>
+      <div class="header-actions">
+        <button class="button" type="button" :disabled="!canExportTopTenAverage" @click="exportTopTenAverage">
+          {{ exportingTopTenAverage ? "导出中" : "导出前十均分" }}
+        </button>
+        <button class="button primary" type="button" :disabled="!canExport" @click="exportOverall">
+          {{ exporting ? "导出中" : "导出总榜" }}
+        </button>
+      </div>
     </PageHeader>
 
     <div class="export-layout">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Award, ChartLine, Download, Home, Settings, Tags, Users } from "lucide-vue-next";
+import { Award, ChartLine, Download, Home, Settings, Tags, Trophy, Users } from "lucide-vue-next";
 import { onMounted, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
@@ -11,13 +11,15 @@ import {
 } from "@/repositories/leaderboardsRepository";
 import { getPerson } from "@/repositories/peopleRepository";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
+import { tabId, useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
+import { parseAnnualLeaderboardYear } from "@/utils/annualLeaderboards";
 
 const navItems = [
   { to: "/", label: "首页", icon: Home },
   { to: "/people", label: "人员", icon: Users },
   { to: "/tags", label: "标签", icon: Tags },
   { to: "/leaderboards", label: "榜单", icon: Award },
+  { to: "/annual-leaderboards", label: "年榜", icon: Trophy },
   { to: "/compare", label: "比较", icon: ChartLine },
   { to: "/exports", label: "导出", icon: Download },
   { to: "/settings", label: "设置", icon: Settings }
@@ -43,6 +45,13 @@ watch(
 async function syncWorkspaceTabFromRoute(): Promise<void> {
   const currentVersion = ++syncVersion;
   const entityId = routeParamId();
+
+  if (route.name === "annual-leaderboard-detail") {
+    const year = parseAnnualLeaderboardYear(route.params.year);
+    // The annual view creates new tabs after confirming that the year has data.
+    workspaceTabs.activateTab(year === null ? "" : tabId("annual-leaderboard", String(year)));
+    return;
+  }
 
   if (route.name === "person-detail" && entityId) {
     workspaceTabs.openPersonTab(entityId, undefined, route.fullPath);
@@ -86,7 +95,14 @@ function routeParamId(): string | null {
       </div>
 
       <nav class="nav-list">
-        <RouterLink v-for="item in navItems" :key="item.to" :to="item.to" class="nav-link">
+        <RouterLink
+          v-for="item in navItems"
+          :key="item.to"
+          :to="item.to"
+          :aria-label="item.label"
+          :title="item.label"
+          class="nav-link"
+        >
           <component :is="item.icon" :size="18" aria-hidden="true" />
           <span>{{ item.label }}</span>
         </RouterLink>

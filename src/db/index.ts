@@ -1,7 +1,8 @@
 import Dexie, { type Table } from "dexie";
 
-import { DB_NAME, DB_SCHEMA_VERSION, stores } from "./schema";
+import { DB_NAME, DB_SCHEMA_VERSION, stores, version1Stores } from "./schema";
 import type {
+  AnnualLeaderboardSettings,
   AppSettings,
   Leaderboard,
   LeaderboardEntry,
@@ -17,9 +18,11 @@ export class FmsDatabase extends Dexie {
   leaderboards!: Table<Leaderboard, string>;
   leaderboard_entries!: Table<LeaderboardEntry, string>;
   app_settings!: Table<AppSettings, string>;
+  annual_leaderboard_settings!: Table<AnnualLeaderboardSettings, number>;
 
   constructor() {
     super(DB_NAME);
+    this.version(1).stores(version1Stores);
     this.version(DB_SCHEMA_VERSION).stores(stores);
   }
 }

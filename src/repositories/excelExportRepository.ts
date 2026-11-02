@@ -80,6 +80,22 @@ export async function exportOverallWorkbook(options: OverallWorkbookOptions): Pr
   return workbook;
 }
 
+export async function exportLeaderboardTopTenAverageWorkbook(): Promise<WorkBook> {
+  const { utils } = await import("xlsx");
+  const [leaderboards, entries] = await Promise.all([
+    db.leaderboards.toArray(),
+    db.leaderboard_entries.toArray()
+  ]);
+  const workbook = utils.book_new();
+  utils.book_append_sheet(
+    workbook,
+    utils.aoa_to_sheet(buildLeaderboardTopTenAverageRows(leaderboards, entries)),
+    "前十均分"
+  );
+
+  return workbook;
+}
+
 export async function exportLegacyWorkbook(): Promise<WorkBook> {
   const { utils } = await import("xlsx");
   const [leaderboards, entries, tags, people, personTags] = await Promise.all([
@@ -179,6 +195,10 @@ export function legacyExportFilename(): string {
   return `fms2-legacy-export-${todayStamp()}.xlsx`;
 }
 
+export function topTenAverageExportFilename(): string {
+  return `fms2-leaderboard-top10-average-${todayStamp()}.xlsx`;
+}
+
 export function leaderboardDigitalDate(leaderboard: Leaderboard): number {
   if (leaderboard.legacyDigitalDate !== null) {
     return leaderboard.legacyDigitalDate;
@@ -263,6 +283,59 @@ function buildRankStatsRows(
   }
 
   return rows;
+}
+
+function buildLeaderboardTopTenAverageRows(
+  leaderboards: Leaderboard[],
+  entries: LeaderboardEntry[]
+): CellValue[][] {
+  const entriesByLeaderboardId = new Map<string, LeaderboardEntry[]>();
+
+  for (const entry of entries) {
+    if (!isEffectiveScoredEntry(entry)) {
+      continue;
+    }
+
+    const groupedEntries = entriesByLeaderboardId.get(entry.leaderboardId) ?? [];
+    groupedEntries.push(entry);
+    entriesByLeaderboardId.set(entry.leaderboardId, groupedEntries);
+  }
+
+  const rows = leaderboards.map((leaderboard) => {
+    const topEntries = (entriesByLeaderboardId.get(leaderboard.id) ?? [])
+      .filter((entry) => entry.rank !== null && entry.rank > 0 && entry.rank <= 10)
+      .sort((left, right) => (left.rank ?? Number.POSITIVE_INFINITY) - (right.rank ?? Number.POSITIVE_INFINITY));
+    const average = topEntries.length > 0
+      ? topEntries.reduce((sum, entry) => sum + (entry.scoreSnapshot ?? 0), 0) / topEntries.length
+      : null;
+
+    return {
+      date: leaderboardDigitalDate(leaderboard),
+      average
+    };
+  });
+
+  rows.sort((left, right) => {
+    if (left.average === null && right.average === null) {
+      return left.date - right.date;
+    }
+    if (left.average === null) {
+      return 1;
+    }
+    if (right.average === null) {
+      return -1;
+    }
+    if (left.average !== right.average) {
+      return right.average - left.average;
+    }
+
+    return left.date - right.date;
+  });
+
+  return [
+    ["榜单日期", "前十名平均分"],
+    ...rows.map((row) => [row.date, row.average])
+  ];
 }
 
 function buildOverallRankTrendRows(

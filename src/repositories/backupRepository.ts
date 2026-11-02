@@ -12,6 +12,7 @@ export async function createJsonBackup(): Promise<string> {
     person_tags: await db.person_tags.toArray(),
     leaderboards: await db.leaderboards.toArray(),
     leaderboard_entries: await db.leaderboard_entries.toArray(),
+    annual_leaderboard_settings: await db.annual_leaderboard_settings.toArray(),
     app_settings: await db.app_settings.toArray()
   };
 

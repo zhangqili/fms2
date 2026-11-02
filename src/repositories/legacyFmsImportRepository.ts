@@ -231,12 +231,20 @@ export async function importLegacyFmsWorkbook(file: File): Promise<LegacyFmsImpo
 
   await db.transaction(
     "rw",
-    [db.people, db.tags, db.person_tags, db.leaderboards, db.leaderboard_entries],
+    [
+      db.people,
+      db.tags,
+      db.person_tags,
+      db.leaderboards,
+      db.leaderboard_entries,
+      db.annual_leaderboard_settings
+    ],
     async () => {
       await Promise.all([
         db.person_tags.clear(),
         db.leaderboard_entries.clear(),
         db.leaderboards.clear(),
+        db.annual_leaderboard_settings.clear(),
         db.tags.clear(),
         db.people.clear()
       ]);

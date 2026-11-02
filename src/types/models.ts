@@ -56,6 +56,12 @@ export interface LeaderboardEntry {
   createdAt: string;
 }
 
+export interface AnnualLeaderboardSettings {
+  year: number;
+  representativePersonIds: string[];
+  updatedAt: string;
+}
+
 export interface AppSettings {
   id: "app";
   scoreMin: number;

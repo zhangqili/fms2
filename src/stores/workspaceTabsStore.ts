@@ -1,7 +1,9 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
-export type WorkspaceTabKind = "person" | "leaderboard";
+import { annualLeaderboardPath } from "@/utils/annualLeaderboards";
+
+export type WorkspaceTabKind = "person" | "leaderboard" | "annual-leaderboard";
 
 export interface WorkspaceTab {
   id: string;
@@ -38,6 +40,15 @@ export const useWorkspaceTabsStore = defineStore("workspace-tabs", () => {
     routePath?: string
   ): string {
     return openTab({ kind: "leaderboard", entityId: leaderboardId, title, routePath });
+  }
+
+  function openAnnualLeaderboardTab(year: number): string {
+    return openTab({
+      kind: "annual-leaderboard",
+      entityId: String(year),
+      title: `${year} 年榜`,
+      routePath: annualLeaderboardPath(year)
+    });
   }
 
   function openTab(input: OpenTabInput): string {
@@ -115,6 +126,7 @@ export const useWorkspaceTabsStore = defineStore("workspace-tabs", () => {
     activeTab,
     openPersonTab,
     openLeaderboardTab,
+    openAnnualLeaderboardTab,
     activateTab,
     updateTabTitle,
     closeTab,
@@ -128,9 +140,22 @@ export function tabId(kind: WorkspaceTabKind, entityId: string): string {
 }
 
 function fallbackTitle(kind: WorkspaceTabKind): string {
+  if (kind === "annual-leaderboard") {
+    return "年榜";
+  }
   return kind === "person" ? "人员详情" : "榜单详情";
 }
 
 function defaultRoutePath(kind: WorkspaceTabKind, entityId: string): string {
+  if (kind === "annual-leaderboard") {
+    return annualLeaderboardPath(Number(entityId));
+  }
   return kind === "person" ? `/people/${entityId}` : `/leaderboards/${entityId}`;
+}
+
+export function workspaceTabFallbackPath(kind: WorkspaceTabKind): string {
+  if (kind === "annual-leaderboard") {
+    return "/";
+  }
+  return kind === "person" ? "/people" : "/leaderboards";
 }

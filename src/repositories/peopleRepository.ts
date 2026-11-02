@@ -134,8 +134,16 @@ export async function setPersonArchived(id: string, archived: boolean): Promise<
 }
 
 export async function deletePerson(id: string): Promise<void> {
-  await db.transaction("rw", db.people, db.person_tags, async () => {
+  await db.transaction("rw", [db.people, db.person_tags, db.annual_leaderboard_settings], async () => {
     await db.person_tags.where("personId").equals(id).delete();
+    await db.annual_leaderboard_settings
+      .filter((settings) => settings.representativePersonIds.includes(id))
+      .modify((settings) => {
+        settings.representativePersonIds = settings.representativePersonIds.filter(
+          (personId) => personId !== id
+        );
+        settings.updatedAt = nowIso();
+      });
     await db.people.delete(id);
   });
 }

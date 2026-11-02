@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "test:annual": "node tests/annual-leaderboards.test.mjs && node tests/annual-navigation.test.mjs"
   },
   "dependencies": {
     "@vueuse/core": "^11.3.0",

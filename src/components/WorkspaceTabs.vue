@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { Award, ChevronLeft, ChevronRight, User, X } from "lucide-vue-next";
+import { Award, ChevronLeft, ChevronRight, Trophy, User, X } from "lucide-vue-next";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { useWorkspaceTabsStore, type WorkspaceTab } from "@/stores/workspaceTabsStore";
+import {
+  useWorkspaceTabsStore,
+  workspaceTabFallbackPath,
+  type WorkspaceTab
+} from "@/stores/workspaceTabsStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -43,7 +47,7 @@ function close(tab: WorkspaceTab): void {
     return;
   }
 
-  void router.push(tab.kind === "person" ? "/people" : "/leaderboards");
+  void router.push(workspaceTabFallbackPath(tab.kind));
 }
 
 function closeByMiddleClick(event: MouseEvent, tab: WorkspaceTab): void {
@@ -138,7 +142,11 @@ function scrollActiveTabIntoView(): void {
         @auxclick="closeByMiddleClick($event, tab)"
       >
         <button class="workspace-tab-main" type="button" @click="activate(tab)">
-          <component :is="tab.kind === 'person' ? User : Award" :size="16" aria-hidden="true" />
+          <component
+            :is="tab.kind === 'person' ? User : tab.kind === 'annual-leaderboard' ? Trophy : Award"
+            :size="16"
+            aria-hidden="true"
+          />
           <span class="workspace-tab-label">{{ tab.title }}</span>
         </button>
         <button

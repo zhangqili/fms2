@@ -303,6 +303,13 @@ textarea {
   color: #5d6b70;
 }
 
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -1158,7 +1165,7 @@ textarea {
   }
 
   .nav-list {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
   .nav-link {

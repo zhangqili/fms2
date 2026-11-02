@@ -64,7 +64,7 @@ async function importLegacyFile(): Promise<void> {
     return;
   }
 
-  const confirmed = window.confirm("此操作会清空当前人员、标签和榜单数据，并导入旧 FMS xlsx。确定继续吗？");
+  const confirmed = window.confirm("此操作会清空当前人员、标签、榜单和年榜代表人物设置，并导入旧 FMS xlsx。确定继续吗？");
   if (!confirmed) {
     return;
   }
