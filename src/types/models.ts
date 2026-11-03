@@ -58,6 +58,7 @@ export interface LeaderboardEntry {
 
 export interface AnnualLeaderboardSettings {
   year: number;
+  /** Ordered representative IDs; at most three, in purple/red/orange order. */
   representativePersonIds: string[];
   updatedAt: string;
 }

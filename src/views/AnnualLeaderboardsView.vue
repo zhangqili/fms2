@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { X } from "lucide-vue-next";
+import { ArrowDown, ArrowUp, X } from "lucide-vue-next";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 
@@ -8,10 +8,16 @@ import {
   getAnnualLeaderboard,
   listAnnualYears,
   saveAnnualRepresentatives,
-  type AnnualLeaderboardData
+  type AnnualLeaderboardData,
+  type AnnualLeaderboardRow
 } from "@/repositories/annualLeaderboardsRepository";
 import { useWorkspaceTabsStore } from "@/stores/workspaceTabsStore";
-import { annualLeaderboardPath, parseAnnualLeaderboardYear } from "@/utils/annualLeaderboards";
+import {
+  annualLeaderboardPath,
+  MAX_ANNUAL_REPRESENTATIVES,
+  parseAnnualLeaderboardYear,
+  validateAnnualRepresentativeIds
+} from "@/utils/annualLeaderboards";
 
 const route = useRoute();
 const router = useRouter();
@@ -28,23 +34,29 @@ const saving = ref(false);
 const saveError = ref("");
 const statusMessage = ref("");
 const scoreFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+const representativeColorClasses = ["representative-purple", "representative-red", "representative-orange"];
 let loadVersion = 0;
 let yearsLoaded = false;
 
-const representatives = computed(() => {
-  const ids = new Set(annualData.value?.representativePersonIds ?? []);
-  return (annualData.value?.rows ?? []).filter((row) => ids.has(row.personId));
-});
-const draftRepresentatives = computed(() => {
-  const ids = new Set(draftRepresentativeIds.value);
-  return (annualData.value?.rows ?? []).filter((row) => ids.has(row.personId));
-});
+const representatives = computed(() => orderedRepresentativeRows(annualData.value?.representativePersonIds ?? []));
+const draftRepresentatives = computed(() => orderedRepresentativeRows(draftRepresentativeIds.value));
+const representativeClasses = computed(() => new Map(
+  representatives.value.map((person, index) => [person.personId, representativeColorClasses[index]])
+));
 const representativeCandidates = computed(() => {
   const query = representativeQuery.value.trim().toLocaleLowerCase("zh-CN");
   return (annualData.value?.rows ?? []).filter((row) =>
     row.personName.toLocaleLowerCase("zh-CN").includes(query)
   );
 });
+
+function orderedRepresentativeRows(personIds: string[]): AnnualLeaderboardRow[] {
+  const rowsById = new Map((annualData.value?.rows ?? []).map((row) => [row.personId, row]));
+  return personIds.flatMap((personId) => {
+    const row = rowsById.get(personId);
+    return row ? [row] : [];
+  });
+}
 
 async function loadData(refreshYears = false): Promise<void> {
   const currentVersion = ++loadVersion;
@@ -120,7 +132,44 @@ function cancelEditing(): void {
 }
 
 function removeDraftRepresentative(personId: string): void {
+  if (saving.value) {
+    return;
+  }
   draftRepresentativeIds.value = draftRepresentativeIds.value.filter((id) => id !== personId);
+  saveError.value = "";
+}
+
+function toggleDraftRepresentative(personId: string): void {
+  if (saving.value) {
+    return;
+  }
+  if (draftRepresentativeIds.value.includes(personId)) {
+    removeDraftRepresentative(personId);
+    return;
+  }
+  if (draftRepresentativeIds.value.length >= MAX_ANNUAL_REPRESENTATIVES) {
+    saveError.value = `代表人物最多选择 ${MAX_ANNUAL_REPRESENTATIVES} 人。`;
+    return;
+  }
+  if (annualData.value?.rows.some((row) => row.personId === personId)) {
+    draftRepresentativeIds.value = [...draftRepresentativeIds.value, personId];
+    saveError.value = "";
+  }
+}
+
+function moveDraftRepresentative(personId: string, direction: -1 | 1): void {
+  if (saving.value) {
+    return;
+  }
+  const ids = [...draftRepresentativeIds.value];
+  const index = ids.indexOf(personId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= ids.length) {
+    return;
+  }
+  [ids[index], ids[target]] = [ids[target], ids[index]];
+  draftRepresentativeIds.value = ids;
+  saveError.value = "";
 }
 
 async function saveRepresentatives(): Promise<void> {
@@ -129,10 +178,11 @@ async function saveRepresentatives(): Promise<void> {
     return;
   }
   const currentVersion = loadVersion;
-  saving.value = true;
   saveError.value = "";
   try {
-    const settings = await saveAnnualRepresentatives(data.year, [...draftRepresentativeIds.value]);
+    const personIds = validateAnnualRepresentativeIds(draftRepresentativeIds.value);
+    saving.value = true;
+    const settings = await saveAnnualRepresentatives(data.year, personIds);
     if (currentVersion === loadVersion) {
       data.representativePersonIds = settings.representativePersonIds;
       cancelEditing();
@@ -217,7 +267,14 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="person in annualData.rows" :key="person.personId">
+              <tr
+                v-for="person in annualData.rows"
+                :key="person.personId"
+                :class="[
+                  representativeClasses.get(person.personId),
+                  { 'annual-representative-row': representativeClasses.has(person.personId) }
+                ]"
+              >
                 <td>{{ person.annualRank }}</td>
                 <td>
                   <RouterLink class="annual-person-link" :to="`/people/${person.personId}`">
@@ -253,16 +310,21 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <div v-if="representatives.length" class="annual-representatives">
-          <RouterLink
-            v-for="person in representatives"
+        <ol v-if="representatives.length" class="annual-representatives">
+          <li
+            v-for="(person, index) in representatives"
             :key="person.personId"
-            class="annual-representative"
-            :to="`/people/${person.personId}`"
           >
-            {{ person.personName }}
-          </RouterLink>
-        </div>
+            <RouterLink
+              class="annual-representative"
+              :class="representativeColorClasses[index]"
+              :to="`/people/${person.personId}`"
+            >
+              <span class="annual-representative-number" aria-hidden="true">{{ index + 1 }}</span>
+              {{ person.personName }}
+            </RouterLink>
+          </li>
+        </ol>
         <p v-else class="empty">尚未设置代表人物。</p>
         <p v-if="statusMessage" class="list-meta" role="status">{{ statusMessage }}</p>
 
@@ -273,7 +335,7 @@ onBeforeUnmount(() => {
           @submit.prevent="saveRepresentatives"
         >
           <div class="section-title annual-section-title">
-            <span class="list-meta">从当年上榜人员中选择，已选 {{ draftRepresentativeIds.length }} 人</span>
+            <span class="list-meta">已选 {{ draftRepresentativeIds.length }} / {{ MAX_ANNUAL_REPRESENTATIVES }} 人</span>
             <button
               class="button"
               type="button"
@@ -283,20 +345,50 @@ onBeforeUnmount(() => {
               清空选择
             </button>
           </div>
-          <div v-if="draftRepresentatives.length" class="annual-selected-people">
-            <button
-              v-for="person in draftRepresentatives"
+          <p class="list-meta annual-order-help">按顺序显示：1 紫色、2 红色、3 橙色。使用箭头调整顺序。</p>
+          <ol v-if="draftRepresentatives.length" class="annual-selected-people">
+            <li
+              v-for="(person, index) in draftRepresentatives"
               :key="person.personId"
               class="annual-selected-person"
-              type="button"
-              :disabled="saving"
-              :aria-label="`移除代表人物 ${person.personName}`"
-              @click="removeDraftRepresentative(person.personId)"
+              :class="representativeColorClasses[index]"
             >
-              {{ person.personName }}
-              <X :size="14" aria-hidden="true" />
-            </button>
-          </div>
+              <span class="annual-representative-number" aria-hidden="true">{{ index + 1 }}</span>
+              <span class="annual-selected-name">{{ person.personName }}</span>
+              <span class="annual-order-actions">
+                <button
+                  class="annual-order-button"
+                  type="button"
+                  :disabled="saving || index === 0"
+                  :aria-label="`上移代表人物 ${person.personName}`"
+                  title="上移"
+                  @click="moveDraftRepresentative(person.personId, -1)"
+                >
+                  <ArrowUp :size="14" aria-hidden="true" />
+                </button>
+                <button
+                  class="annual-order-button"
+                  type="button"
+                  :disabled="saving || index === draftRepresentatives.length - 1"
+                  :aria-label="`下移代表人物 ${person.personName}`"
+                  title="下移"
+                  @click="moveDraftRepresentative(person.personId, 1)"
+                >
+                  <ArrowDown :size="14" aria-hidden="true" />
+                </button>
+                <button
+                  class="annual-order-button"
+                  type="button"
+                  :disabled="saving"
+                  :aria-label="`移除代表人物 ${person.personName}`"
+                  title="移除"
+                  @click="removeDraftRepresentative(person.personId)"
+                >
+                  <X :size="14" aria-hidden="true" />
+                </button>
+              </span>
+            </li>
+          </ol>
           <label class="field-label">
             <span>搜索人员</span>
             <input
@@ -314,7 +406,13 @@ onBeforeUnmount(() => {
               :key="person.personId"
               class="annual-candidate"
             >
-              <input v-model="draftRepresentativeIds" type="checkbox" :value="person.personId" />
+              <input
+                type="checkbox"
+                :value="person.personId"
+                :checked="draftRepresentativeIds.includes(person.personId)"
+                :disabled="draftRepresentativeIds.length >= MAX_ANNUAL_REPRESENTATIVES && !draftRepresentativeIds.includes(person.personId)"
+                @change="toggleDraftRepresentative(person.personId)"
+              />
               <span>{{ person.personName }}</span>
               <span class="list-meta">年榜第 {{ person.annualRank }} 名</span>
             </label>
@@ -396,11 +494,36 @@ onBeforeUnmount(() => {
 }
 
 .annual-representatives,
-.annual-selected-people,
+.annual-selected-people {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .annual-editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.representative-purple {
+  --representative-color: #7e22ce;
+  --representative-soft: #faf5ff;
+  --representative-border: #e9d5ff;
+}
+
+.representative-red {
+  --representative-color: #b91c1c;
+  --representative-soft: #fef2f2;
+  --representative-border: #fecaca;
+}
+
+.representative-orange {
+  --representative-color: #c2410c;
+  --representative-soft: #fff7ed;
+  --representative-border: #fed7aa;
 }
 
 .annual-representative,
@@ -408,25 +531,76 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   max-width: 100%;
   padding: 8px 14px;
-  border: 1px solid var(--theme-border-soft);
+  border: 1px solid var(--representative-border);
   border-radius: 8px;
-  color: var(--theme-color);
-  background: var(--theme-softer);
+  color: var(--representative-color);
+  background: var(--representative-soft);
   overflow-wrap: anywhere;
   font-weight: 650;
 }
 
-.annual-representative:hover,
-.annual-selected-person:hover:not(:disabled) {
-  background: var(--theme-soft);
+.annual-representative:hover {
+  background: color-mix(in srgb, var(--representative-color) 12%, white);
+}
+
+.annual-representative-number {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: white;
+  background: var(--representative-color);
+  font-size: 0.875rem;
+  font-weight: 750;
 }
 
 .annual-selected-person {
-  padding: 4px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 6px 8px;
   font-weight: 400;
+}
+
+.annual-selected-name {
+  min-width: 0;
+}
+
+.annual-order-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.annual-order-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--representative-border);
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
   cursor: pointer;
+}
+
+.annual-order-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--representative-color) 12%, white);
+}
+
+.annual-order-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.annual-order-help {
+  margin: 0;
 }
 
 .annual-selected-person svg {
@@ -474,6 +648,11 @@ onBeforeUnmount(() => {
   accent-color: var(--theme-color);
 }
 
+.annual-candidate:has(input:disabled) {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .annual-candidates .empty {
   padding-inline: 12px;
 }
@@ -518,9 +697,26 @@ onBeforeUnmount(() => {
   background: var(--theme-softer);
 }
 
+.annual-table tbody tr.annual-representative-row {
+  color: var(--representative-color);
+  background: var(--representative-soft);
+}
+
+.annual-table tbody tr.annual-representative-row:hover {
+  background: color-mix(in srgb, var(--representative-color) 12%, white);
+}
+
+.annual-representative-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--representative-color);
+}
+
 .annual-person-link:hover {
   color: var(--theme-color);
   text-decoration: underline;
+}
+
+.annual-representative-row .annual-person-link:hover {
+  color: var(--representative-color);
 }
 
 .annual-error {

@@ -11,6 +11,8 @@ let calculatePersonOverallMetrics;
 let useWorkspaceTabsStore;
 let workspaceTabFallbackPath;
 let parseAnnualLeaderboardYear;
+let normalizeAnnualRepresentativeIds;
+let validateAnnualRepresentativeIds;
 
 before(async () => {
   const setupTimeout = setTimeout(() => {
@@ -33,7 +35,8 @@ before(async () => {
     ({ useWorkspaceTabsStore, workspaceTabFallbackPath } = await vite.ssrLoadModule(
       "/src/stores/workspaceTabsStore.ts"
     ));
-    ({ parseAnnualLeaderboardYear } = await vite.ssrLoadModule("/src/utils/annualLeaderboards.ts"));
+    ({ parseAnnualLeaderboardYear, normalizeAnnualRepresentativeIds, validateAnnualRepresentativeIds } =
+      await vite.ssrLoadModule("/src/utils/annualLeaderboards.ts"));
   } finally {
     clearTimeout(setupTimeout);
   }
@@ -190,6 +193,20 @@ test("year route parameters reject invalid values and invalid tabs leave state u
   assert.throws(() => store.openAnnualLeaderboardTab(0), /请选择有效年份/);
   assert.equal(store.tabs.length, 0);
   assert.equal(store.activeTabId, null);
+});
+
+test("legacy representative settings keep saved order, remove invalid IDs and expose at most three people", () => {
+  const eligibleIds = new Set(["a", "b", "c", "d"]);
+  assert.deepEqual(normalizeAnnualRepresentativeIds(["c", "missing", "b", "c", "d", "a"], eligibleIds), ["c", "b", "d"]);
+  assert.deepEqual(normalizeAnnualRepresentativeIds([], eligibleIds), []);
+  assert.deepEqual(normalizeAnnualRepresentativeIds(["missing"], eligibleIds), []);
+});
+
+test("saving representatives preserves order and rejects more than three unique selections", () => {
+  assert.deepEqual(validateAnnualRepresentativeIds(["c", "a", "b"]), ["c", "a", "b"]);
+  assert.deepEqual(validateAnnualRepresentativeIds(["c", "a", "c", "b"]), ["c", "a", "b"]);
+  assert.deepEqual(validateAnnualRepresentativeIds([]), []);
+  assert.throws(() => validateAnnualRepresentativeIds(["a", "b", "c", "d"]), /最多选择 3 人/);
 });
 
 after(() => vite?.close());

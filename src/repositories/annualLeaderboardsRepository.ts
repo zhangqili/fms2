@@ -10,6 +10,10 @@ import type {
   Person
 } from "@/types/models";
 import { nowIso } from "@/utils/dates";
+import {
+  normalizeAnnualRepresentativeIds,
+  validateAnnualRepresentativeIds
+} from "@/utils/annualLeaderboards";
 
 export interface AnnualLeaderboardRow {
   personId: string;
@@ -52,8 +56,9 @@ export async function getAnnualLeaderboard(year: number): Promise<AnnualLeaderbo
       return {
         year,
         rows,
-        representativePersonIds: [...new Set(settings?.representativePersonIds ?? [])]
-          .filter((personId) => eligiblePersonIds.has(personId))
+        representativePersonIds: normalizeAnnualRepresentativeIds(
+          settings?.representativePersonIds ?? [], eligiblePersonIds
+        )
       };
     }
   );
@@ -64,6 +69,7 @@ export async function saveAnnualRepresentatives(
   personIds: string[]
 ): Promise<AnnualLeaderboardSettings> {
   assertValidYear(year);
+  const representativePersonIds = validateAnnualRepresentativeIds(personIds);
   return db.transaction(
     "rw",
     [db.people, db.leaderboards, db.leaderboard_entries, db.annual_leaderboard_settings],
@@ -75,7 +81,6 @@ export async function saveAnnualRepresentatives(
       ]);
       const rows = calculateAnnualLeaderboard(year, people, leaderboards, entries);
       const eligiblePersonIds = new Set(rows.map((row) => row.personId));
-      const representativePersonIds = [...new Set(personIds)];
       if (representativePersonIds.some((personId) => !eligiblePersonIds.has(personId))) {
         throw new Error("代表人物只能选择该年榜中的人员，请重新加载年榜后再设置。");
       }

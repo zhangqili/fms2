@@ -134,6 +134,13 @@ function deferred() {
   return { promise, resolve };
 }
 
+function addRepresentativeCandidates(fixture, year) {
+  fixture.data[year].rows = ["a", "b", "c", "d"].map((personId, index) => ({
+    personId, personName: personId.toUpperCase(), annualRank: index + 1,
+    weeklyAverageScore: 40 - index, annualPeakScore: 50 - index, weeklyPeakRank: index + 1
+  }));
+}
+
 test("entry opens the latest year; year selection, back/forward and person round trips restore the URL year", async () => {
   createFixture();
   const { router, tabs, state } = await mountPage("/annual-leaderboards");
@@ -234,6 +241,73 @@ test("a save failure keeps the current selection available for retry", async () 
   assert.equal(state().saving, false);
   assert.deepEqual(state().draftRepresentativeIds, ["person-2024"]);
   assert.match(state().saveError, /Simulated save failure/);
+});
+
+test("representative order can be changed and survives save/reload with matching per-person table colors", async () => {
+  const fixture = createFixture();
+  addRepresentativeCandidates(fixture, 2024);
+  fixture.data[2024].representativePersonIds = ["c", "a", "b"];
+  const { state } = await mountPage("/annual-leaderboards/2024");
+  await waitFor(() => state().annualData?.year === 2024);
+  assert.deepEqual(state().representatives.map((person) => person.personId), ["c", "a", "b"]);
+  assert.deepEqual([...state().representativeClasses], [
+    ["c", "representative-purple"], ["a", "representative-red"], ["b", "representative-orange"]
+  ]);
+  state().startEditing();
+  state().moveDraftRepresentative("c", -1);
+  state().moveDraftRepresentative("b", 1);
+  assert.deepEqual(state().draftRepresentativeIds, ["c", "a", "b"]);
+  state().moveDraftRepresentative("b", -1);
+  state().moveDraftRepresentative("c", 1);
+  assert.deepEqual(state().draftRepresentatives.map((person) => person.personId), ["b", "c", "a"]);
+  await state().saveRepresentatives();
+  assert.deepEqual(fixture.data[2024].representativePersonIds, ["b", "c", "a"]);
+  await state().loadData();
+  assert.deepEqual(state().representatives.map((person) => person.personId), ["b", "c", "a"]);
+  assert.deepEqual([...state().representativeClasses], [
+    ["b", "representative-purple"], ["c", "representative-red"], ["a", "representative-orange"]
+  ]);
+  assert.deepEqual(state().annualData.rows.map((person) => person.personId), ["a", "b", "c", "d"]);
+});
+
+test("three-person limit allows deselection and replacement, and removing a person reassigns colors", async () => {
+  const fixture = createFixture();
+  addRepresentativeCandidates(fixture, 2024);
+  const { state } = await mountPage("/annual-leaderboards/2024");
+  await waitFor(() => state().annualData?.year === 2024);
+  state().startEditing();
+  for (const id of ["c", "a", "b", "d"]) state().toggleDraftRepresentative(id);
+  assert.deepEqual(state().draftRepresentativeIds, ["c", "a", "b"]);
+  assert.match(state().saveError, /最多选择 3 人/);
+  state().toggleDraftRepresentative("a");
+  state().toggleDraftRepresentative("d");
+  assert.deepEqual(state().draftRepresentativeIds, ["c", "b", "d"]);
+  state().removeDraftRepresentative("c");
+  await state().saveRepresentatives();
+  assert.deepEqual([...state().representativeClasses], [
+    ["b", "representative-purple"], ["d", "representative-red"]
+  ]);
+  state().startEditing();
+  state().draftRepresentativeIds = [];
+  await state().saveRepresentatives();
+  assert.deepEqual(state().representatives, []);
+  assert.equal(state().representativeClasses.size, 0);
+});
+
+test("save validates the limit before calling the repository and retains an oversized draft", async () => {
+  const fixture = createFixture();
+  addRepresentativeCandidates(fixture, 2024);
+  let saveCalls = 0;
+  fixture.save = async () => { saveCalls += 1; };
+  const { state } = await mountPage("/annual-leaderboards/2024");
+  await waitFor(() => state().annualData?.year === 2024);
+  state().startEditing();
+  state().draftRepresentativeIds = ["a", "b", "c", "d"];
+  await state().saveRepresentatives();
+  assert.equal(saveCalls, 0);
+  assert.equal(state().editingRepresentatives, true);
+  assert.equal(state().saving, false);
+  assert.match(state().saveError, /最多选择 3 人/);
 });
 
 afterEach(() => {
